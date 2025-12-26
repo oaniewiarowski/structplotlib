@@ -1,0 +1,13 @@
+Frame,Station,OutputCase,CaseType,DCR Max,XI,YI,XJ,YJ
+A1,0.0,CASE_A,Combo,0.6,0,0,10,0
+A1,5.0,CASE_A,Combo,0.8,0,0,10,0
+A1,10.0,CASE_A,Combo,0.7,0,0,10,0
+A1,5.0,CASE_A,Combo,0.75,0,0,10,0
+A1,0.0,CASE_B,Combo,0.9,0,0,10,0
+A1,5.0,CASE_B,Combo,1.2,0,0,10,0
+A1,10.0,CASE_B,Combo,1.1,0,0,10,0
+A1,5.0,CASE_B,Combo,1.15,0,0,10,0
+B1,0.0,CASE_A,Combo,0.4,0,5,10,5
+B1,5.0,CASE_A,Combo,0.5,0,5,10,5
+B1,10.0,CASE_A,Combo,0.45,0,5,10,5
+B1,0.0,CASE_A,Combo,0.42,0,5,10,5
