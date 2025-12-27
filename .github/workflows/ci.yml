@@ -32,7 +32,7 @@ jobs:
 
     - name: Run ruff
       run: |
-        ruff check .
+        ruff check structplotlib/ tests/ examples/
 
     - name: Check formatting with black
       run: |

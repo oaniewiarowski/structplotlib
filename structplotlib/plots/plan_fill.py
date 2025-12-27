@@ -340,7 +340,6 @@ def plot_fill_plan(
     """
 
     # Optional boundary normalization: allow passing raw ETABS/SAP exports directly.
-    normalized = False
     value_col_eff = value_col
 
     if normalize:
@@ -369,7 +368,6 @@ def plot_fill_plan(
                 strict=strict,
                 enforce_preferred_input_names=enforce_preferred_input_names,
             )
-            normalized = True
 
         # If the user specified an input/header spelling that got renamed during normalization,
         # resolve it to the canonical column name.
