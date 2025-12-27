@@ -6,6 +6,7 @@ CSI-specific (ETABS/SAP2000) schema normalization.
 
 Maps CSI export column names to canonical internal column names.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,8 +14,8 @@ from typing import Literal
 
 import pandas as pd
 
-from .base import ColumnSpec, require_columns, REQUIRED_CANONICAL, CANONICAL_CORE
 from .._errors import SchemaError
+from .base import CANONICAL_CORE, REQUIRED_CANONICAL, ColumnSpec, require_columns
 
 Source = Literal["etabs", "sap2000"]
 Table = Literal["frame_dcr"]
@@ -221,4 +222,3 @@ def _coerce_types(df: pd.DataFrame) -> pd.DataFrame:
         out["element"] = out["element"].astype(str)
 
     return out
-

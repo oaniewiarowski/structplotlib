@@ -56,4 +56,3 @@ def infer_norm_bounds(
         vmax = float(norm_max)
 
     return (vmin, vmax)
-

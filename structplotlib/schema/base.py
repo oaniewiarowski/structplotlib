@@ -6,10 +6,11 @@ Generic schema validation and canonicalization helpers.
 
 These are source-agnostic utilities for column validation and selection.
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Sequence
 
 import pandas as pd
 
@@ -146,12 +147,9 @@ REQUIRED_CANONICAL = (
     "y_j",
 )
 
-CANONICAL_CORE = tuple(
-    c for c in REQUIRED_CANONICAL if c not in ("story", "step_type")
-)
+CANONICAL_CORE = tuple(c for c in REQUIRED_CANONICAL if c not in ("story", "step_type"))
 
 OPTIONAL_CANONICAL = (
     "element",
     "elem_station",
 )
-

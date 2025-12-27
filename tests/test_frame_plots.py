@@ -5,7 +5,14 @@ matplotlib.use("Agg")  # headless backend for CI
 import pandas as pd
 import pytest
 
-from structplotlib import SchemaError, load_df, envelope_by_member, reduce_plan, plot_fill_plan, plot_plan
+from structplotlib import (
+    SchemaError,
+    envelope_by_member,
+    load_df,
+    plot_fill_plan,
+    plot_plan,
+    reduce_plan,
+)
 
 
 def test_schema_normalize_etabs_required_canonical_columns_exist():
@@ -85,7 +92,9 @@ def test_envelope_by_member_picks_controlling_case():
     a = env[env["member_id"] == "A1"]
     b = env[env["member_id"] == "B1"]
 
-    assert set(a["output_case"].unique()) == {"CASE_B"}  # member A1 should envelope to CASE_B (max=1.2)
+    assert set(a["output_case"].unique()) == {
+        "CASE_B"
+    }  # member A1 should envelope to CASE_B (max=1.2)
     assert set(b["output_case"].unique()) == {"CASE_A"}  # member B1 only has CASE_A
 
 

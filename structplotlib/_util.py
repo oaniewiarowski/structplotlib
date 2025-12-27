@@ -4,10 +4,11 @@ structplotlib._util
 
 Small shared helper functions used across the package.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Sequence
+from collections.abc import Sequence
 
 
 def _norm_col(s: str) -> str:
@@ -20,4 +21,3 @@ def _did_you_mean(available: Sequence[str], expected: str) -> list[str]:
     ek = _norm_col(expected)
     hits = [c for c in available if _norm_col(c) == ek]
     return hits
-

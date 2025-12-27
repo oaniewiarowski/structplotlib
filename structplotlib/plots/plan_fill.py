@@ -19,19 +19,25 @@ Two layers:
 
 from __future__ import annotations
 
-from typing import Callable, Tuple, Literal
+from collections.abc import Callable
+from typing import Literal
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
+from ..reduce.frame_stations import (
+    Agg,
+    Mode,
+    envelope_by_member,
+    filter_cases,
+    reduce_plan,
+)
 from ..schema.base import require_columns
 from ..schema.csi import normalize_df, resolve_canonical_name
-from ..reduce.frame_stations import filter_cases, envelope_by_member, reduce_plan, Mode, Agg
 
 
-def _infer_figsize_from_bbox(df: pd.DataFrame,
-                             width_in: float) -> tuple[float, float]:
+def _infer_figsize_from_bbox(df: pd.DataFrame, width_in: float) -> tuple[float, float]:
     x = np.concatenate([df["x_i"].to_numpy(float), df["x_j"].to_numpy(float)])
     y = np.concatenate([df["y_i"].to_numpy(float), df["y_j"].to_numpy(float)])
     w = max(1e-9, float(np.max(x) - np.min(x)))
@@ -71,7 +77,7 @@ def plot_plan(
     label_shift: float = 1.5,
     fontsize: float = 14.0,
     watermark: str | None = None,
-) -> Tuple[plt.Figure, plt.Axes]:
+) -> tuple[plt.Figure, plt.Axes]:
     """Plot one story in plan from a reduced dataframe.
 
     Parameters
@@ -91,8 +97,7 @@ def plot_plan(
     annotate_threshold:
         If provided, only annotate members whose controlling |value| >= threshold.
     """
-    required = {"story", "member_id", "station",
-                "x_i", "y_i", "x_j", "y_j", value_col}
+    required = {"story", "member_id", "station", "x_i", "y_i", "x_j", "y_j", value_col}
     missing = sorted(required - set(df_reduced.columns))
     if missing:
         raise ValueError(f"[plot_plan] Missing required columns: {missing}")
@@ -102,7 +107,9 @@ def plot_plan(
     if story is None:
         stories = list(pd.unique(df["story"]))
         if len(stories) != 1:
-            raise ValueError(f"[plot_plan] story=None but dataframe has {len(stories)} stories: {stories}")
+            raise ValueError(
+                f"[plot_plan] story=None but dataframe has {len(stories)} stories: {stories}"
+            )
         story = str(stories[0])
 
     df = df[df["story"] == story].copy()
@@ -113,19 +120,21 @@ def plot_plan(
 
     # Create axes
     if ax is None:
-        fig, ax = plt.subplots(
-            figsize=_infer_figsize_from_bbox(df, width_in=width_in))
+        fig, ax = plt.subplots(figsize=_infer_figsize_from_bbox(df, width_in=width_in))
     else:
         fig = ax.figure
 
     # Decide which rows contribute colored markers / colormap scaling
     if selected_col is not None:
         if selected_col not in df.columns:
-            raise ValueError(f"[plot_plan] selected_col={selected_col!r} not found in dataframe columns")
+            raise ValueError(
+                f"[plot_plan] selected_col={selected_col!r} not found in dataframe columns"
+            )
         sel_mask = df[selected_col].astype(bool).to_numpy()
         if not np.any(sel_mask):
             raise ValueError(
-                "[plot_plan] selected_col provided but no members are selected (no colored markers to plot)")
+                "[plot_plan] selected_col provided but no members are selected (no colored markers to plot)"
+            )
         vals_for_norm = df.loc[sel_mask, value_col].to_numpy(float)
     else:
         vals_for_norm = df[value_col].to_numpy(float)
@@ -141,13 +150,17 @@ def plot_plan(
 
     for mid, g in df.groupby("member_id", sort=False):
         r0 = g.iloc[0]
-        xi, yi, xj, yj = float(r0["x_i"]), float(
-            r0["y_i"]), float(r0["x_j"]), float(r0["y_j"])
+        xi, yi, xj, yj = (
+            float(r0["x_i"]),
+            float(r0["y_i"]),
+            float(r0["x_j"]),
+            float(r0["y_j"]),
+        )
         dx, dy = xj - xi, yj - yi
-        L = float(np.hypot(dx, dy))
-        if L < 1e-12:
+        member_len = float(np.hypot(dx, dy))
+        if member_len < 1e-12:
             # degenerate in plan; skip densification, but still allow annotation at the point
-            L = 1.0
+            member_len = 1.0
 
         st = g["station"].to_numpy(float)
         vv = g[value_col].to_numpy(float)
@@ -158,7 +171,7 @@ def plot_plan(
         vv = vv[order]
 
         # Parameter along member: station assumed to be distance from I-end (length units)
-        t_raw = st / L
+        t_raw = st / member_len
 
         # Member-level selection
         selected = True
@@ -179,8 +192,7 @@ def plot_plan(
         else:
             # densify per interval between stations
             chunks = [
-                np.linspace(t_raw[i], t_raw[i + 1],
-                            k_per_segment, endpoint=False)
+                np.linspace(t_raw[i], t_raw[i + 1], k_per_segment, endpoint=False)
                 for i in range(t_raw.size - 1)
             ]
             t_dense = np.concatenate(chunks + [np.array([t_raw[-1]])])
@@ -203,7 +215,7 @@ def plot_plan(
                 ym = yi + dy * t_ctrl
 
                 # shift label along unit normal to the member
-                nx, ny = (-dy / L, dx / L)
+                nx, ny = (-dy / member_len, dx / member_len)
                 xm += nx * float(label_shift)
                 ym += ny * float(label_shift)
 
@@ -212,8 +224,13 @@ def plot_plan(
 
     # Context lines first (thin black)
     for xi, yi, xj, yj in context_lines:
-        ax.plot([xi, xj], [yi, yj], color="black",
-                linewidth=float(others_linewidth), zorder=1)
+        ax.plot(
+            [xi, xj],
+            [yi, yj],
+            color="black",
+            linewidth=float(others_linewidth),
+            zorder=1,
+        )
 
     if xs_all:
         xs_all = np.concatenate(xs_all)
@@ -235,8 +252,7 @@ def plot_plan(
         )
 
         if show_colorbar:
-            cb = fig.colorbar(sc, ax=ax, location="bottom",
-                              fraction=0.05, pad=0.0, aspect=10)
+            cb = fig.colorbar(sc, ax=ax, location="bottom", fraction=0.05, pad=0.0, aspect=10)
             cb.set_label(value_name or value_col)
     else:
         sc = None  # no selected markers
@@ -340,7 +356,6 @@ def plot_fill_plan(
     """
 
     # Optional boundary normalization: allow passing raw ETABS/SAP exports directly.
-    normalized = False
     value_col_eff = value_col
 
     if normalize:
@@ -369,13 +384,11 @@ def plot_fill_plan(
                 strict=strict,
                 enforce_preferred_input_names=enforce_preferred_input_names,
             )
-            normalized = True
 
         # If the user specified an input/header spelling that got renamed during normalization,
         # resolve it to the canonical column name.
         if value_col_eff not in df.columns and source is not None:
-            canon = resolve_canonical_name(
-                value_col_eff, source=source, table=table)
+            canon = resolve_canonical_name(value_col_eff, source=source, table=table)
             if canon is not None and canon in df.columns:
                 value_col_eff = canon
     else:
@@ -392,8 +405,19 @@ def plot_fill_plan(
 
     require_columns(
         df,
-        ["story", "member_id", "station", "output_case", "case_type",
-            "step_type", "x_i", "y_i", "x_j", "y_j", value_col_eff],
+        [
+            "story",
+            "member_id",
+            "station",
+            "output_case",
+            "case_type",
+            "step_type",
+            "x_i",
+            "y_i",
+            "x_j",
+            "y_j",
+            value_col_eff,
+        ],
         where="plot_fill_plan",
     )
 
@@ -410,22 +434,21 @@ def plot_fill_plan(
             frame_filter = pd.Series(frame_filter, index=df0.index)
         if len(frame_filter) != len(df0):
             raise ValueError(
-                "[plot_fill_plan] frame_filter must be the same length as df after story_name filtering")
+                "[plot_fill_plan] frame_filter must be the same length as df after story_name filtering"
+            )
         df0["_selected_row"] = frame_filter.astype(bool).to_numpy()
 
-        g = df0.groupby(["story", "member_id"], sort=False)[
-            "_selected_row"].nunique(dropna=False)
+        g = df0.groupby(["story", "member_id"], sort=False)["_selected_row"].nunique(dropna=False)
         bad = g[g > 1]
         if not bad.empty:
             offenders = list(bad.index[:8])
             raise ValueError(
                 "[plot_fill_plan] frame_filter must be constant within each (story, member_id). "
-
                 f"Examples with mixed True/False: {offenders}"
             )
         selected_map = (
-            df0.groupby(["story", "member_id"], sort=False,
-                        as_index=False)["_selected_row"].first()
+            df0.groupby(["story", "member_id"], sort=False, as_index=False)["_selected_row"]
+            .first()
             .rename(columns={"_selected_row": "selected"})
         )
         df0 = df0.drop(columns=["_selected_row"])
@@ -443,26 +466,30 @@ def plot_fill_plan(
 
     if envelope:
         df2 = envelope_by_member(
-            df1, value_col=value_col_eff, mode=reduction_mode, station_agg=station_agg)
+            df1, value_col=value_col_eff, mode=reduction_mode, station_agg=station_agg
+        )
     else:
         df2 = df1.copy()
         # If multiple step types exist, force the user to pick one (unless they already filtered upstream)
         steps = list(pd.unique(df2["step_type"]))
         if step_type is not None:
             if step_type not in steps:
-                raise ValueError(f"[plot_fill_plan] step_type={step_type!r} not found. Available: {steps}")
+                raise ValueError(
+                    f"[plot_fill_plan] step_type={step_type!r} not found. Available: {steps}"
+                )
             df2 = df2[df2["step_type"] == step_type].copy()
         else:
             if len(steps) > 1:
-                raise ValueError(f"[plot_fill_plan] Multiple step_type values exist for non-envelope plot: {steps}. Pass step_type=... or prefilter upstream.")
+                raise ValueError(
+                    f"[plot_fill_plan] Multiple step_type values exist for non-envelope plot: {steps}. Pass step_type=... or prefilter upstream."
+                )
 
     # Reduce to plot-ready
     df_red = reduce_plan(df2, value_col=value_col_eff, station_agg=station_agg)
 
     # Attach selection info
     if selected_map is not None:
-        df_red = df_red.merge(
-            selected_map, on=["story", "member_id"], how="left")
+        df_red = df_red.merge(selected_map, on=["story", "member_id"], how="left")
         df_red["selected"] = df_red["selected"].fillna(True).astype(bool)
         selected_col = "selected"
     else:
@@ -512,4 +539,3 @@ def plot_fill_plan(
             dfs[str(story)] = df_story.reset_index(drop=True)
 
     return (figs, dfs) if return_df else figs
-
