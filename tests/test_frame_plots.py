@@ -224,3 +224,40 @@ def test_plot_fill_plan_return_df_includes_output_case_for_debugging():
         import matplotlib.pyplot as plt
 
         plt.close(fig)
+
+
+def test_plot_fill_plan_allows_categorical_value_col_without_step_type_selection():
+    # Regression: categorical value columns (e.g. member_id / Unique Name) should not require
+    # selecting a single step_type, even if the dataframe contains Min/Max rows.
+    df = pd.DataFrame(
+        {
+            "story": ["L1", "L1", "L1", "L1"],
+            "member_id": ["1", "1", "2", "2"],  # numeric-like strings; should be treated as labels
+            "station": [0.0, 10.0, 0.0, 10.0],
+            "output_case": ["CASE_A", "CASE_A", "CASE_A", "CASE_A"],
+            "case_type": ["Combination", "Combination", "Combination", "Combination"],
+            "step_type": ["Min", "Max", "Min", "Max"],
+            "x_i": [0.0, 0.0, 0.0, 0.0],
+            "y_i": [0.0, 0.0, 5.0, 5.0],
+            "x_j": [10.0, 10.0, 10.0, 10.0],
+            "y_j": [0.0, 0.0, 5.0, 5.0],
+            # some numeric column present but not used; mirrors real exports
+            "DCR_MAX": [0.1, 0.2, 0.3, 0.4],
+        }
+    )
+
+    figs = plot_fill_plan(
+        df,
+        normalize=False,
+        value_col="member_id",
+        show_colorbar=False,
+        width_in=6.0,
+    )
+    fig, ax = figs["L1"]
+    # Label-only mode should not create a scatter collection
+    assert len(ax.collections) == 0
+    assert set(t.get_text() for t in ax.texts) == {"1", "2"}
+
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
