@@ -133,6 +133,11 @@ def plot_plan(
     df = df.sort_values(["member_id", "station"], kind="mergesort")
     value_series = df[value_col]
     value_is_numeric = is_numeric_dtype(value_series)
+    numeric_coerce = pd.to_numeric(value_series, errors="coerce")
+    if value_is_numeric:
+        invalid_numeric = numeric_coerce.isna() & ~value_series.isna()
+        if invalid_numeric.any():
+            value_is_numeric = False
     member_constant = (
         df.groupby("member_id", sort=False)[value_col].nunique(dropna=False) <= 1
     ).all()
