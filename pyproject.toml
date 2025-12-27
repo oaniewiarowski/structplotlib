@@ -92,3 +92,6 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["structplotlib"]
+
+[tool.black]
+line-length = 100

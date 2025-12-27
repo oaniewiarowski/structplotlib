@@ -6,6 +6,7 @@ CSI-specific (ETABS/SAP2000) schema normalization.
 
 Maps CSI export column names to canonical internal column names.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -188,9 +189,7 @@ def load_df(
     elif path.suffix.lower() in {".xlsx", ".xls"}:
         df = pd.read_excel(path, **read_kwargs)
     else:
-        raise ValueError(
-            f"Unsupported file type: {path.suffix!r} (expected .csv or .xlsx)"
-        )
+        raise ValueError(f"Unsupported file type: {path.suffix!r} (expected .csv or .xlsx)")
 
     return normalize_df(
         df,

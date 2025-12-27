@@ -209,9 +209,7 @@ def plot_plan(
             # controlling station: abs max
             i_ctrl = int(np.argmax(np.abs(vv)))
             v_ctrl = float(vv[i_ctrl])
-            if (annotate_threshold is None) or (
-                abs(v_ctrl) >= float(annotate_threshold)
-            ):
+            if (annotate_threshold is None) or (abs(v_ctrl) >= float(annotate_threshold)):
                 t_ctrl = float(t_raw[i_ctrl])
                 xm = xi + dx * t_ctrl
                 ym = yi + dy * t_ctrl
@@ -254,9 +252,7 @@ def plot_plan(
         )
 
         if show_colorbar:
-            cb = fig.colorbar(
-                sc, ax=ax, location="bottom", fraction=0.05, pad=0.0, aspect=10
-            )
+            cb = fig.colorbar(sc, ax=ax, location="bottom", fraction=0.05, pad=0.0, aspect=10)
             cb.set_label(value_name or value_col)
     else:
         sc = None  # no selected markers
@@ -442,9 +438,7 @@ def plot_fill_plan(
             )
         df0["_selected_row"] = frame_filter.astype(bool).to_numpy()
 
-        g = df0.groupby(["story", "member_id"], sort=False)["_selected_row"].nunique(
-            dropna=False
-        )
+        g = df0.groupby(["story", "member_id"], sort=False)["_selected_row"].nunique(dropna=False)
         bad = g[g > 1]
         if not bad.empty:
             offenders = list(bad.index[:8])
@@ -453,9 +447,7 @@ def plot_fill_plan(
                 f"Examples with mixed True/False: {offenders}"
             )
         selected_map = (
-            df0.groupby(["story", "member_id"], sort=False, as_index=False)[
-                "_selected_row"
-            ]
+            df0.groupby(["story", "member_id"], sort=False, as_index=False)["_selected_row"]
             .first()
             .rename(columns={"_selected_row": "selected"})
         )
