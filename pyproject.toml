@@ -82,7 +82,6 @@ select = [
 ]
 ignore = [
     "E501",  # line too long (handled by black)
-    "W503",  # line break before binary operator (conflicts with black)
 ]
 
 [tool.ruff.per-file-ignores]
