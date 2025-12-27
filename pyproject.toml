@@ -7,12 +7,40 @@ build-backend = "setuptools.build_meta"
 name = "structplotlib"
 version = "0.1.0"
 description = "Strict, small plotting utilities for station-level ETABS/SAP2000 post-processed data."
+readme = "README.md"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 dependencies = [
   "pandas>=2.0",
   "numpy>=1.24",
   "matplotlib>=3.8",
 ]
+authors = [
+  {name = "Olek Niewiarowksi"}
+]
+keywords = [
+  "structural-engineering",
+  "etabs",
+  "sap2000",
+  "plotting",
+  "visualization",
+  "frame-analysis",
+]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Visualization",
+  "Development Status :: 3 - Alpha",
+]
+
+[project.urls]
+# Homepage = "https://github.com/oaniewiarowski/structplotlib"
+# Repository = "https://github.com/oaniewiarowski/structplotlib"
+# Documentation = "https://github.com/oaniewiarowski/structplotlib#readme"
 
 [project.optional-dependencies]
 dev = [
