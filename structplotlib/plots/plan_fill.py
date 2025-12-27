@@ -72,6 +72,8 @@ def plot_plan(
     show_values: bool = False,
     value_fmt: str | Callable[[float], str] = "{v:.2f}",
     annotate_threshold: float | None = None,
+    value_text_color: str = "black",
+    value_text_color_above_threshold: str | None = None,
     selected_col: str | None = None,
     others_linewidth: float = 0.5,
     label_shift: float = 1.5,
@@ -96,6 +98,11 @@ def plot_plan(
         ETABS-style "Show Values": label the controlling value (abs max) once per member.
     annotate_threshold:
         If provided, only annotate members whose controlling |value| >= threshold.
+    value_text_color:
+        Default color for "Show Values" labels.
+    value_text_color_above_threshold:
+        If provided and annotate_threshold is provided, use this alternate text color for labels
+        whose controlling |value| >= annotate_threshold.
     """
     required = {"story", "member_id", "station", "x_i", "y_i", "x_j", "y_j", value_col}
     missing = sorted(required - set(df_reduced.columns))
@@ -145,7 +152,7 @@ def plot_plan(
         norm_max = float(np.max(vals_for_norm))
 
     xs_all, ys_all, vals_all = [], [], []
-    labels = []  # (x,y,text,angle_deg)
+    labels = []  # (x,y,text,angle_deg,color)
     context_lines = []  # (xi,yi,xj,yj)
 
     for mid, g in df.groupby("member_id", sort=False):
@@ -220,7 +227,14 @@ def plot_plan(
                 ym += ny * float(label_shift)
 
                 ang = float(np.degrees(np.arctan2(dy, dx)))
-                labels.append((xm, ym, _format_value(v_ctrl, value_fmt), ang))
+                color = str(value_text_color)
+                if (
+                    annotate_threshold is not None
+                    and value_text_color_above_threshold is not None
+                    and abs(v_ctrl) >= float(annotate_threshold)
+                ):
+                    color = str(value_text_color_above_threshold)
+                labels.append((xm, ym, _format_value(v_ctrl, value_fmt), ang, color))
 
     # Context lines first (thin black)
     for xi, yi, xj, yj in context_lines:
@@ -257,7 +271,7 @@ def plot_plan(
     else:
         sc = None  # no selected markers
 
-    for x, y, txt, ang in labels:
+    for x, y, txt, ang, color in labels:
         ax.text(
             x,
             y,
@@ -267,6 +281,7 @@ def plot_plan(
             rotation=ang,
             rotation_mode="anchor",
             fontsize=float(fontsize),
+            color=color,
             zorder=5,
         )
 
@@ -328,6 +343,8 @@ def plot_fill_plan(
     show_values: bool = False,
     value_fmt: str | Callable[[float], str] = "{v:.2f}",
     annotate_threshold: float | None = None,
+    value_text_color: str = "black",
+    value_text_color_above_threshold: str | None = None,
     others_linewidth: float = 0.5,
     label_shift: float = 1.5,
     fontsize: float = 14.0,
@@ -353,6 +370,9 @@ def plot_fill_plan(
         {story: (fig, ax)}
     dfs_dict (optional):
         {story: df_reduced_used_for_plot}
+
+        Notes: when return_df=True, the returned per-story dataframe includes an ``output_case`` column
+        to aid debugging of which governing case was used for each plotted member.
     """
 
     # Optional boundary normalization: allow passing raw ETABS/SAP exports directly.
@@ -528,6 +548,8 @@ def plot_fill_plan(
             show_values=show_values,
             value_fmt=value_fmt,
             annotate_threshold=annotate_threshold,
+            value_text_color=value_text_color,
+            value_text_color_above_threshold=value_text_color_above_threshold,
             selected_col=selected_col,
             others_linewidth=others_linewidth,
             label_shift=label_shift,

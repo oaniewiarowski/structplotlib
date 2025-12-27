@@ -177,7 +177,7 @@ def reduce_plan(
     """Reduce canonical station-level data to plot-ready rows.
 
     Output columns:
-        story, member_id, station, value, x_i,y_i,x_j,y_j, x,y
+        story, member_id, station, output_case, value, x_i,y_i,x_j,y_j, x,y
 
     This:
     - aggregates duplicates per (member_id, station) using station_agg (default max)
@@ -215,6 +215,7 @@ def reduce_plan(
 
     reduced = df.groupby(["story", "member_id", "station"], sort=False, as_index=False).agg(
         value=(value_col, station_agg),
+        output_case=("output_case", "first"),
         x_i=("x_i", "first"),
         y_i=("y_i", "first"),
         x_j=("x_j", "first"),
