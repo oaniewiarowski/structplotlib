@@ -131,6 +131,32 @@ def test_plot_smoke_and_annotation_matches_value():
     plt.close(fig)
 
 
+def test_plot_annotation_alt_color_above_threshold():
+    df = load_df("tests/data/etabs_min.csv", source="etabs", strict=True)
+    env = envelope_by_member(df, value_col="DCR_MAX", mode="max")
+    red = reduce_plan(env, value_col="DCR_MAX", station_agg="max")
+
+    fig, ax = plot_plan(
+        red,
+        story="L1",
+        show_values=True,
+        value_fmt="{v:.2f}",
+        value_col="value",
+        show_colorbar=False,
+        annotate_threshold=1.0,
+        value_text_color="black",
+        value_text_color_above_threshold="red",
+    )
+
+    # Threshold=1.0 filters out member B1's 0.50 label, leaving only A1's 1.20 label.
+    assert [t.get_text() for t in ax.texts] == ["1.20"]
+    assert ax.texts[0].get_color() == "red"
+
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
 def test_plot_fill_plan_normalize_accepts_alias_headers_and_raw_value_column():
     # Simulate common pipeline-altered ETABS headers with stripped spaces
     raw = pd.read_csv("tests/data/etabs_min.csv")
@@ -156,6 +182,41 @@ def test_plot_fill_plan_normalize_accepts_alias_headers_and_raw_value_column():
         width_in=6.0,
     )
     assert "L1" in figs
+
+    # Clean up created figures
+    for fig, _ax in figs.values():
+        fig.clf()
+        import matplotlib.pyplot as plt
+
+        plt.close(fig)
+
+
+def test_plot_fill_plan_return_df_includes_output_case_for_debugging():
+    raw = pd.read_csv("tests/data/etabs_min.csv")
+    figs, dfs = plot_fill_plan(
+        raw,
+        source="etabs",
+        normalize=True,
+        value_col="DCR_MAX",
+        cases=["CASE_A", "CASE_B"],
+        envelope=True,
+        reduction_mode="max",
+        show_colorbar=False,
+        show_values=False,
+        width_in=6.0,
+        return_df=True,
+    )
+
+    assert "L1" in figs
+    assert "L1" in dfs
+    df_used = dfs["L1"]
+    assert "output_case" in df_used.columns
+
+    # Matches envelope fixture expectations:
+    # - member A1 envelopes to CASE_B (max=1.2)
+    # - member B1 only has CASE_A
+    assert set(df_used[df_used["member_id"] == "A1"]["output_case"].unique()) == {"CASE_B"}
+    assert set(df_used[df_used["member_id"] == "B1"]["output_case"].unique()) == {"CASE_A"}
 
     # Clean up created figures
     for fig, _ax in figs.values():
