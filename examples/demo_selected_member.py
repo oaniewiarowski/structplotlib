@@ -23,7 +23,7 @@ value_col = "M3"  # <-- pick a metric column from your export
 figs, ndf = plot_fill_plan(
     df_raw,
     source="sap2000",
-    value_col="M3",
+    value_col="member_id",
     cases=None,  # use all output_case values in the file
     envelope=True,  # pick governing case-triple per member
     reduction_mode="absmax",  # governing metric across cases/stations
