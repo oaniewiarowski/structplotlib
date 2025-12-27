@@ -25,6 +25,7 @@ from typing import Literal
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 
 from ..reduce.frame_stations import (
     Agg,
@@ -103,6 +104,12 @@ def plot_plan(
     value_text_color_above_threshold:
         If provided and annotate_threshold is provided, use this alternate text color for labels
         whose controlling |value| >= annotate_threshold.
+
+    Notes
+    -----
+    If the values are non-numeric, or if every member has a single value across all stations,
+    the plot switches to a label-only mode: members are drawn as simple lines and the value is
+    annotated at the member midpoint (no colormap).
     """
     required = {"story", "member_id", "station", "x_i", "y_i", "x_j", "y_j", value_col}
     missing = sorted(required - set(df_reduced.columns))
@@ -124,6 +131,16 @@ def plot_plan(
         raise ValueError(f"[plot_plan] No rows for story={story!r}")
 
     df = df.sort_values(["member_id", "station"], kind="mergesort")
+    value_series = df[value_col]
+    value_is_numeric = is_numeric_dtype(value_series)
+    member_constant = (
+        df.groupby("member_id", sort=False)[value_col].nunique(dropna=False) <= 1
+    ).all()
+    label_mode = (not value_is_numeric) or member_constant
+    if selected_col is not None and selected_col not in df.columns:
+        raise ValueError(
+            f"[plot_plan] selected_col={selected_col!r} not found in dataframe columns"
+        )
 
     # Create axes
     if ax is None:
@@ -132,28 +149,27 @@ def plot_plan(
         fig = ax.figure
 
     # Decide which rows contribute colored markers / colormap scaling
-    if selected_col is not None:
-        if selected_col not in df.columns:
-            raise ValueError(
-                f"[plot_plan] selected_col={selected_col!r} not found in dataframe columns"
-            )
-        sel_mask = df[selected_col].astype(bool).to_numpy()
-        if not np.any(sel_mask):
-            raise ValueError(
-                "[plot_plan] selected_col provided but no members are selected (no colored markers to plot)"
-            )
-        vals_for_norm = df.loc[sel_mask, value_col].to_numpy(float)
-    else:
-        vals_for_norm = df[value_col].to_numpy(float)
+    if not label_mode:
+        if selected_col is not None:
+            sel_mask = df[selected_col].astype(bool).to_numpy()
+            if not np.any(sel_mask):
+                raise ValueError(
+                    "[plot_plan] selected_col provided but no members are selected (no colored markers to plot)"
+                )
+            vals_for_norm = df.loc[sel_mask, value_col].to_numpy(float)
+        else:
+            vals_for_norm = df[value_col].to_numpy(float)
 
-    if norm_min is None:
-        norm_min = float(np.min(vals_for_norm))
-    if norm_max is None:
-        norm_max = float(np.max(vals_for_norm))
+        if norm_min is None:
+            norm_min = float(np.min(vals_for_norm))
+        if norm_max is None:
+            norm_max = float(np.max(vals_for_norm))
 
     xs_all, ys_all, vals_all = [], [], []
     labels = []  # (x,y,text,angle_deg,color)
     context_lines = []  # (xi,yi,xj,yj)
+    member_lines = []  # (xi,yi,xj,yj,linewidth)
+    selected_linewidth = max(1.0, float(others_linewidth) * 2.5)
 
     for mid, g in df.groupby("member_id", sort=False):
         r0 = g.iloc[0]
@@ -192,6 +208,35 @@ def plot_plan(
 
         if not selected:
             context_lines.append((xi, yi, xj, yj))
+            if label_mode:
+                continue
+            else:
+                continue
+
+        if label_mode:
+            member_lines.append((xi, yi, xj, yj, selected_linewidth))
+            v_label = g[value_col].iloc[0]
+            if value_is_numeric:
+                v_label = float(v_label)
+                if (annotate_threshold is not None) and (
+                    abs(v_label) < float(annotate_threshold)
+                ):
+                    continue
+                label_text = _format_value(v_label, value_fmt)
+            else:
+                label_text = str(v_label)
+            xm = 0.5 * (xi + xj)
+            ym = 0.5 * (yi + yj)
+            ang = float(np.degrees(np.arctan2(dy, dx)))
+            color = str(value_text_color)
+            if (
+                value_is_numeric
+                and annotate_threshold is not None
+                and value_text_color_above_threshold is not None
+                and abs(v_label) >= float(annotate_threshold)
+            ):
+                color = str(value_text_color_above_threshold)
+            labels.append((xm, ym, label_text, ang, color))
             continue
 
         if t_raw.size == 1 or k_per_segment < 2:
@@ -245,6 +290,9 @@ def plot_plan(
             linewidth=float(others_linewidth),
             zorder=1,
         )
+
+    for xi, yi, xj, yj, lw in member_lines:
+        ax.plot([xi, xj], [yi, yj], color="black", linewidth=lw, zorder=2)
 
     if xs_all:
         xs_all = np.concatenate(xs_all)
@@ -440,6 +488,7 @@ def plot_fill_plan(
         ],
         where="plot_fill_plan",
     )
+    value_is_numeric = is_numeric_dtype(df[value_col_eff])
 
     df0 = df.copy()
     if story_name is not None:
@@ -482,7 +531,9 @@ def plot_fill_plan(
     else:
         cases_eff = list(cases)
     if envelope is None:
-        envelope = len(cases_eff) > 1
+        envelope = value_is_numeric and len(cases_eff) > 1
+    if (not value_is_numeric) and envelope:
+        envelope = False
 
     if envelope:
         df2 = envelope_by_member(
