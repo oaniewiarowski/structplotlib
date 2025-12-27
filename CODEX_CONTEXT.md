@@ -240,6 +240,21 @@ Plots should use these defaults unless the user overrides via kwargs.
 pytest -q
 ```
 
+### Code quality (required before submitting a PR)
+Run formatting + linting from the repo root:
+
+```bash
+black .
+ruff check .
+```
+
+If you use auto-fix, re-run the check to confirm a clean result:
+
+```bash
+ruff check . --fix
+ruff check .
+```
+
 Tests are small and deterministic. Fixtures are CSV under `tests/data/`.
 
 ### Add a regression test for every bug

@@ -218,9 +218,7 @@ def plot_plan(
             v_label = g[value_col].iloc[0]
             if value_is_numeric:
                 v_label = float(v_label)
-                if (annotate_threshold is not None) and (
-                    abs(v_label) < float(annotate_threshold)
-                ):
+                if (annotate_threshold is not None) and (abs(v_label) < float(annotate_threshold)):
                     continue
                 label_text = _format_value(v_label, value_fmt)
             else:

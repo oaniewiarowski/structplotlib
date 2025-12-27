@@ -134,6 +134,22 @@ Run tests from the repo root:
 pytest -q
 ```
 
+### Code quality (required before submitting a PR)
+
+Before opening or updating a PR, run formatting + linting from the repo root:
+
+```bash
+black .
+ruff check .
+```
+
+If you use auto-fix, re-run the check to confirm a clean result:
+
+```bash
+ruff check . --fix
+ruff check .
+```
+
 ### Internal docs
 - `CODEX_CONTEXT.md` — authoritative spec to share with coding agents
 - `DESIGN_NOTES.md` — roadmap + acceptance scenarios (legacy from AGENTS.md)
