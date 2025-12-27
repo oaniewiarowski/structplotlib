@@ -38,7 +38,8 @@ def require_columns(df: pd.DataFrame, required: Iterable[str], *, where: str) ->
 
     msg = (
         f"[{where}] Missing required columns: {missing}\n"
-        f"Available columns (first 30): {cols[:30]}" + (" ..." if len(cols) > 30 else "")
+        f"Available columns (first 30): {cols[:30]}"
+        + (" ..." if len(cols) > 30 else "")
     )
     if hints:
         msg += "\nHints:\n- " + "\n- ".join(hints)
@@ -105,7 +106,11 @@ class ColumnSpec:
                     f"[{where}] Found both preferred {self.preferred!r} and aliases {alias_present!r} for canonical {self.canonical!r}. "
                     "Provide only one naming convention upstream."
                 )
-            if enforce_preferred_input_names and (not preferred_present) and alias_present:
+            if (
+                enforce_preferred_input_names
+                and (not preferred_present)
+                and alias_present
+            ):
                 raise SchemaError(
                     f"[{where}] Expected preferred input column {self.preferred!r} for canonical {self.canonical!r}, but found alias {alias_present!r}. "
                     "Rename upstream or call load_df(..., enforce_preferred_input_names=False)."
@@ -146,12 +151,9 @@ REQUIRED_CANONICAL = (
     "y_j",
 )
 
-CANONICAL_CORE = tuple(
-    c for c in REQUIRED_CANONICAL if c not in ("story", "step_type")
-)
+CANONICAL_CORE = tuple(c for c in REQUIRED_CANONICAL if c not in ("story", "step_type"))
 
 OPTIONAL_CANONICAL = (
     "element",
     "elem_station",
 )
-

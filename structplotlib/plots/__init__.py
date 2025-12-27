@@ -17,4 +17,3 @@ __all__ = [
     "plot_plan_by_story",
     "plot_fill_plan",
 ]
-

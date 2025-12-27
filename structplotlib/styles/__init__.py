@@ -28,4 +28,3 @@ __all__ = [
     "DEFAULT_K_PER_SEGMENT",
     "DEFAULT_WIDTH_IN",
 ]
-

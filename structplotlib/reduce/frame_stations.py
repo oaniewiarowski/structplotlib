@@ -51,10 +51,11 @@ def filter_cases(df: pd.DataFrame, cases: list[str] | None) -> pd.DataFrame:
     missing = [c for c in cases if c not in available]
     if missing:
         raise ValueError(
-            "[filter_cases] Requested output_case values not found: " + repr(missing) +
-            ". Available: " +
-            repr(sorted(available)[:30]) +
-            (" ..." if len(available) > 30 else "")
+            "[filter_cases] Requested output_case values not found: "
+            + repr(missing)
+            + ". Available: "
+            + repr(sorted(available)[:30])
+            + (" ..." if len(available) > 30 else "")
         )
     return df[df["output_case"].isin(cases)].copy()
 
@@ -84,8 +85,15 @@ def envelope_by_member(
     """
     require_columns(
         df,
-        ["story", "member_id", "station", "output_case",
-            "case_type", "step_type", value_col],
+        [
+            "story",
+            "member_id",
+            "station",
+            "output_case",
+            "case_type",
+            "step_type",
+            value_col,
+        ],
         where="envelope_by_member",
     )
 
@@ -101,58 +109,65 @@ def envelope_by_member(
             f"Examples of member_id with multiple stories: {offenders}"
         )
 
-
     if station_agg not in ("max", "min", "mean"):
         raise ValueError(
-            f"[envelope_by_member] station_agg must be one of 'max','min','mean', got {station_agg!r}")
+            f"[envelope_by_member] station_agg must be one of 'max','min','mean', got {station_agg!r}"
+        )
     if mode not in ("max", "min", "absmax"):
         raise ValueError(
-            f"[envelope_by_member] mode must be one of 'max','min','absmax', got {mode!r}")
+            f"[envelope_by_member] mode must be one of 'max','min','absmax', got {mode!r}"
+        )
 
     # 1) Aggregate duplicates at the station level *within* each case triple
-    gkeys = ["member_id", "output_case",
-             "case_type", "step_type", "station"]
-    station = (
-        df.groupby(gkeys, sort=False, as_index=False)
-          .agg(v=(value_col, station_agg))
+    gkeys = ["member_id", "output_case", "case_type", "step_type", "station"]
+    station = df.groupby(gkeys, sort=False, as_index=False).agg(
+        v=(value_col, station_agg)
     )
 
     # 2) Score each triple for each member
     tkeys = ["member_id", "output_case", "case_type", "step_type"]
     if mode == "max":
-        scores = station.groupby(
-            tkeys, sort=False, as_index=False).agg(score=("v", "max"))
+        scores = station.groupby(tkeys, sort=False, as_index=False).agg(
+            score=("v", "max")
+        )
         ascending = False
     elif mode == "min":
-        scores = station.groupby(
-            tkeys, sort=False, as_index=False).agg(score=("v", "min"))
+        scores = station.groupby(tkeys, sort=False, as_index=False).agg(
+            score=("v", "min")
+        )
         ascending = True
     else:  # absmax
         station = station.assign(abs_v=station["v"].abs())
         scores = station.groupby(tkeys, sort=False, as_index=False).agg(
-            score=("abs_v", "max"))
+            score=("abs_v", "max")
+        )
         ascending = False
 
     # Stable tie-breaking: mergesort keeps input order stable.
-    scores = scores.sort_values(["member_id", "score"], ascending=[
-        True, ascending], kind="mergesort")
-    ctrl = (
-        scores.groupby(["member_id"], sort=False, as_index=False)
-              .first()[["member_id", "output_case", "case_type", "step_type"]]
+    scores = scores.sort_values(
+        ["member_id", "score"], ascending=[True, ascending], kind="mergesort"
     )
+    ctrl = scores.groupby(["member_id"], sort=False, as_index=False).first()[
+        ["member_id", "output_case", "case_type", "step_type"]
+    ]
 
-    out = df.merge(ctrl, on=["member_id", "output_case",
-                   "case_type", "step_type"], how="inner")
+    out = df.merge(
+        ctrl, on=["member_id", "output_case", "case_type", "step_type"], how="inner"
+    )
     out = out.sort_values(["member_id", "station"], kind="mergesort")
     return out.reset_index(drop=True)
 
 
 def _assert_single_case_triple_per_member(df: pd.DataFrame) -> None:
     """Fail loudly if multiple case triples remain per (story, member_id)."""
-    require_columns(df, ["story", "member_id", "output_case",
-                    "case_type", "step_type"], where="reduce_plan")
-    triples = df[["story", "member_id", "output_case",
-                  "case_type", "step_type"]].drop_duplicates()
+    require_columns(
+        df,
+        ["story", "member_id", "output_case", "case_type", "step_type"],
+        where="reduce_plan",
+    )
+    triples = df[
+        ["story", "member_id", "output_case", "case_type", "step_type"]
+    ].drop_duplicates()
     counts = triples.groupby(["story", "member_id"], sort=False).size()
     bad = counts[counts > 1]
     if not bad.empty:
@@ -160,9 +175,7 @@ def _assert_single_case_triple_per_member(df: pd.DataFrame) -> None:
         offenders = list(bad.index[:8])
         raise ValueError(
             "[reduce_plan] Multiple (output_case, case_type, step_type) triples remain for some members. "
-
             "Filter to a single case, select a single step_type, or call envelope_by_member() first. "
-
             f"Examples (story, member_id) with >1 triple: {offenders}"
         )
 
@@ -197,33 +210,31 @@ def reduce_plan(
 
     if station_agg not in ("max", "min", "mean"):
         raise ValueError(
-            f"[reduce_plan] station_agg must be one of 'max','min','mean', got {station_agg!r}")
+            f"[reduce_plan] station_agg must be one of 'max','min','mean', got {station_agg!r}"
+        )
 
     # Geometry consistency: endpoints should not vary within a member
     geom = df.groupby(["story", "member_id"], sort=False)[
-        ["x_i", "y_i", "x_j", "y_j"]].nunique(dropna=False)
+        ["x_i", "y_i", "x_j", "y_j"]
+    ].nunique(dropna=False)
     bad_geom = geom[(geom > 1).any(axis=1)]
     if not bad_geom.empty:
         offenders = list(bad_geom.index[:8])
         raise ValueError(
             "[reduce_plan] Inconsistent geometry within some members (endpoints vary across rows). "
-
             f"Examples (story, member_id): {offenders}"
         )
 
-    reduced = (
-        df.groupby(["story", "member_id", "station"],
-                   sort=False, as_index=False)
-        .agg(
-            value=(value_col, station_agg),
-            x_i=("x_i", "first"),
-            y_i=("y_i", "first"),
-            x_j=("x_j", "first"),
-            y_j=("y_j", "first"),
-        )
+    reduced = df.groupby(
+        ["story", "member_id", "station"], sort=False, as_index=False
+    ).agg(
+        value=(value_col, station_agg),
+        x_i=("x_i", "first"),
+        y_i=("y_i", "first"),
+        x_j=("x_j", "first"),
+        y_j=("y_j", "first"),
     )
 
     reduced["x"] = 0.5 * (reduced["x_i"] + reduced["x_j"])
     reduced["y"] = 0.5 * (reduced["y_i"] + reduced["y_j"])
     return reduced
-

@@ -20,4 +20,3 @@ def _did_you_mean(available: Sequence[str], expected: str) -> list[str]:
     ek = _norm_col(expected)
     hits = [c for c in available if _norm_col(c) == ek]
     return hits
-

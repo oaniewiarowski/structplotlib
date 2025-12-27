@@ -188,7 +188,9 @@ def load_df(
     elif path.suffix.lower() in {".xlsx", ".xls"}:
         df = pd.read_excel(path, **read_kwargs)
     else:
-        raise ValueError(f"Unsupported file type: {path.suffix!r} (expected .csv or .xlsx)")
+        raise ValueError(
+            f"Unsupported file type: {path.suffix!r} (expected .csv or .xlsx)"
+        )
 
     return normalize_df(
         df,
@@ -221,4 +223,3 @@ def _coerce_types(df: pd.DataFrame) -> pd.DataFrame:
         out["element"] = out["element"].astype(str)
 
     return out
-

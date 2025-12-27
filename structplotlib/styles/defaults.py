@@ -24,4 +24,3 @@ DEFAULT_WIDTH_IN: float = 14.0
 
 # Watermark defaults
 DEFAULT_WATERMARK_LOC: tuple[float, float] = (0.99, 0.01)  # (x, y) in axes coordinates
-

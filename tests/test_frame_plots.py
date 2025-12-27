@@ -92,7 +92,9 @@ def test_envelope_by_member_picks_controlling_case():
     a = env[env["member_id"] == "A1"]
     b = env[env["member_id"] == "B1"]
 
-    assert set(a["output_case"].unique()) == {"CASE_B"}  # member A1 should envelope to CASE_B (max=1.2)
+    assert set(a["output_case"].unique()) == {
+        "CASE_B"
+    }  # member A1 should envelope to CASE_B (max=1.2)
     assert set(b["output_case"].unique()) == {"CASE_A"}  # member B1 only has CASE_A
 
 

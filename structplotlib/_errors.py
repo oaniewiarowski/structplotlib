@@ -16,4 +16,3 @@ class ReduceError(ValueError):
 
 class PlotError(ValueError):
     """Raised when plotting fails."""
-

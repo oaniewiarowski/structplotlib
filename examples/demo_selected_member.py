@@ -17,23 +17,23 @@ path = "filtered_df.xlsx"
 df_raw = pd.read_excel(path, nrows=2000)
 # %%
 
-value_col = "M3"   # <-- pick a metric column from your export
+value_col = "M3"  # <-- pick a metric column from your export
 
 figs, ndf = plot_fill_plan(
     df_raw,
-    source='sap2000',
-    value_col='M3',
-    cases=None,              # use all output_case values in the file
-    envelope=True,           # pick governing case-triple per member
+    source="sap2000",
+    value_col="M3",
+    cases=None,  # use all output_case values in the file
+    envelope=True,  # pick governing case-triple per member
     reduction_mode="absmax",  # governing metric across cases/stations
-    station_agg="max",     # aggregate duplicates at the same station
+    station_agg="max",  # aggregate duplicates at the same station
     show_values=True,
     # norm_min=0,
     # norm_max=1,
     value_fmt="{v:.2f}",
     norm_max=float(df_raw[value_col].max()),
     width_in=34,
-    return_df=True
+    return_df=True,
 )
 
 # %%
