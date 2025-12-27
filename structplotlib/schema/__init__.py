@@ -7,6 +7,7 @@ Schema normalization and validation.
 - base: Generic column validation and canonicalization helpers
 - csi: CSI-specific (ETABS/SAP2000) mappings and normalization
 """
+
 from .base import (
     CANONICAL_CORE,
     OPTIONAL_CANONICAL,

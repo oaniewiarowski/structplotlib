@@ -6,6 +6,7 @@ Data reduction and envelope selection for plotting.
 
 - frame_stations: Station-level aggregation and envelope selection
 """
+
 from .frame_stations import (
     Agg,
     Mode,

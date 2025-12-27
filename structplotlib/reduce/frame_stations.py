@@ -120,27 +120,19 @@ def envelope_by_member(
 
     # 1) Aggregate duplicates at the station level *within* each case triple
     gkeys = ["member_id", "output_case", "case_type", "step_type", "station"]
-    station = df.groupby(gkeys, sort=False, as_index=False).agg(
-        v=(value_col, station_agg)
-    )
+    station = df.groupby(gkeys, sort=False, as_index=False).agg(v=(value_col, station_agg))
 
     # 2) Score each triple for each member
     tkeys = ["member_id", "output_case", "case_type", "step_type"]
     if mode == "max":
-        scores = station.groupby(tkeys, sort=False, as_index=False).agg(
-            score=("v", "max")
-        )
+        scores = station.groupby(tkeys, sort=False, as_index=False).agg(score=("v", "max"))
         ascending = False
     elif mode == "min":
-        scores = station.groupby(tkeys, sort=False, as_index=False).agg(
-            score=("v", "min")
-        )
+        scores = station.groupby(tkeys, sort=False, as_index=False).agg(score=("v", "min"))
         ascending = True
     else:  # absmax
         station = station.assign(abs_v=station["v"].abs())
-        scores = station.groupby(tkeys, sort=False, as_index=False).agg(
-            score=("abs_v", "max")
-        )
+        scores = station.groupby(tkeys, sort=False, as_index=False).agg(score=("abs_v", "max"))
         ascending = False
 
     # Stable tie-breaking: mergesort keeps input order stable.
@@ -151,9 +143,7 @@ def envelope_by_member(
         ["member_id", "output_case", "case_type", "step_type"]
     ]
 
-    out = df.merge(
-        ctrl, on=["member_id", "output_case", "case_type", "step_type"], how="inner"
-    )
+    out = df.merge(ctrl, on=["member_id", "output_case", "case_type", "step_type"], how="inner")
     out = out.sort_values(["member_id", "station"], kind="mergesort")
     return out.reset_index(drop=True)
 
@@ -165,9 +155,7 @@ def _assert_single_case_triple_per_member(df: pd.DataFrame) -> None:
         ["story", "member_id", "output_case", "case_type", "step_type"],
         where="reduce_plan",
     )
-    triples = df[
-        ["story", "member_id", "output_case", "case_type", "step_type"]
-    ].drop_duplicates()
+    triples = df[["story", "member_id", "output_case", "case_type", "step_type"]].drop_duplicates()
     counts = triples.groupby(["story", "member_id"], sort=False).size()
     bad = counts[counts > 1]
     if not bad.empty:
@@ -214,9 +202,9 @@ def reduce_plan(
         )
 
     # Geometry consistency: endpoints should not vary within a member
-    geom = df.groupby(["story", "member_id"], sort=False)[
-        ["x_i", "y_i", "x_j", "y_j"]
-    ].nunique(dropna=False)
+    geom = df.groupby(["story", "member_id"], sort=False)[["x_i", "y_i", "x_j", "y_j"]].nunique(
+        dropna=False
+    )
     bad_geom = geom[(geom > 1).any(axis=1)]
     if not bad_geom.empty:
         offenders = list(bad_geom.index[:8])
@@ -225,9 +213,7 @@ def reduce_plan(
             f"Examples (story, member_id): {offenders}"
         )
 
-    reduced = df.groupby(
-        ["story", "member_id", "station"], sort=False, as_index=False
-    ).agg(
+    reduced = df.groupby(["story", "member_id", "station"], sort=False, as_index=False).agg(
         value=(value_col, station_agg),
         x_i=("x_i", "first"),
         y_i=("y_i", "first"),

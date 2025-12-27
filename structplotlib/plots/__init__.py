@@ -6,6 +6,7 @@ Matplotlib plotting utilities.
 
 - plan_fill: Plan view fill diagrams with station-level coloring
 """
+
 from .plan_fill import (
     plot_fill_plan,
     plot_plan,

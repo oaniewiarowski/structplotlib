@@ -4,6 +4,7 @@ structplotlib._util
 
 Small shared helper functions used across the package.
 """
+
 from __future__ import annotations
 
 import re

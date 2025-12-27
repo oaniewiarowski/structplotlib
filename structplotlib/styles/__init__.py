@@ -7,6 +7,7 @@ Style defaults and normalization helpers.
 - defaults: Firm defaults for fonts, annotation style, linewidths, etc.
 - norms: Normalization helpers (vmin/vmax, abs norms)
 """
+
 from .defaults import (
     DEFAULT_FONTSIZE,
     DEFAULT_K_PER_SEGMENT,
