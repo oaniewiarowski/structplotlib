@@ -19,15 +19,16 @@ Two layers:
 
 from __future__ import annotations
 
-from typing import Callable, Tuple, Literal
+from collections.abc import Callable
+from typing import Literal
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
+from ..reduce.frame_stations import Agg, Mode, envelope_by_member, filter_cases, reduce_plan
 from ..schema.base import require_columns
 from ..schema.csi import normalize_df, resolve_canonical_name
-from ..reduce.frame_stations import filter_cases, envelope_by_member, reduce_plan, Mode, Agg
 
 
 def _infer_figsize_from_bbox(df: pd.DataFrame,
@@ -71,7 +72,7 @@ def plot_plan(
     label_shift: float = 1.5,
     fontsize: float = 14.0,
     watermark: str | None = None,
-) -> Tuple[plt.Figure, plt.Axes]:
+) -> tuple[plt.Figure, plt.Axes]:
     """Plot one story in plan from a reduced dataframe.
 
     Parameters
@@ -144,10 +145,10 @@ def plot_plan(
         xi, yi, xj, yj = float(r0["x_i"]), float(
             r0["y_i"]), float(r0["x_j"]), float(r0["y_j"])
         dx, dy = xj - xi, yj - yi
-        L = float(np.hypot(dx, dy))
-        if L < 1e-12:
+        member_len = float(np.hypot(dx, dy))
+        if member_len < 1e-12:
             # degenerate in plan; skip densification, but still allow annotation at the point
-            L = 1.0
+            member_len = 1.0
 
         st = g["station"].to_numpy(float)
         vv = g[value_col].to_numpy(float)
@@ -158,7 +159,7 @@ def plot_plan(
         vv = vv[order]
 
         # Parameter along member: station assumed to be distance from I-end (length units)
-        t_raw = st / L
+        t_raw = st / member_len
 
         # Member-level selection
         selected = True
@@ -203,7 +204,7 @@ def plot_plan(
                 ym = yi + dy * t_ctrl
 
                 # shift label along unit normal to the member
-                nx, ny = (-dy / L, dx / L)
+                nx, ny = (-dy / member_len, dx / member_len)
                 xm += nx * float(label_shift)
                 ym += ny * float(label_shift)
 

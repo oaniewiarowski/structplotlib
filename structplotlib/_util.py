@@ -7,7 +7,7 @@ Small shared helper functions used across the package.
 from __future__ import annotations
 
 import re
-from typing import Sequence
+from collections.abc import Sequence
 
 
 def _norm_col(s: str) -> str:

@@ -5,7 +5,14 @@ matplotlib.use("Agg")  # headless backend for CI
 import pandas as pd
 import pytest
 
-from structplotlib import SchemaError, load_df, envelope_by_member, reduce_plan, plot_fill_plan, plot_plan
+from structplotlib import (
+    SchemaError,
+    envelope_by_member,
+    load_df,
+    plot_fill_plan,
+    plot_plan,
+    reduce_plan,
+)
 
 
 def test_schema_normalize_etabs_required_canonical_columns_exist():

@@ -13,8 +13,8 @@ from typing import Literal
 
 import pandas as pd
 
-from .base import ColumnSpec, require_columns, REQUIRED_CANONICAL, CANONICAL_CORE
 from .._errors import SchemaError
+from .base import CANONICAL_CORE, REQUIRED_CANONICAL, ColumnSpec, require_columns
 
 Source = Literal["etabs", "sap2000"]
 Table = Literal["frame_dcr"]

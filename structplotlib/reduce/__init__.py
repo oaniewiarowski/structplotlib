@@ -7,11 +7,11 @@ Data reduction and envelope selection for plotting.
 - frame_stations: Station-level aggregation and envelope selection
 """
 from .frame_stations import (
-    filter_cases,
-    envelope_by_member,
-    reduce_plan,
     Agg,
     Mode,
+    envelope_by_member,
+    filter_cases,
+    reduce_plan,
 )
 
 __all__ = [

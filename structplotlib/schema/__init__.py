@@ -8,13 +8,13 @@ Schema normalization and validation.
 - csi: CSI-specific (ETABS/SAP2000) mappings and normalization
 """
 from .base import (
-    require_columns,
-    ColumnSpec,
-    REQUIRED_CANONICAL,
     CANONICAL_CORE,
     OPTIONAL_CANONICAL,
+    REQUIRED_CANONICAL,
+    ColumnSpec,
+    require_columns,
 )
-from .csi import normalize_df, load_df, resolve_canonical_name, Source, Table
+from .csi import Source, Table, load_df, normalize_df, resolve_canonical_name
 
 __all__ = [
     "require_columns",
