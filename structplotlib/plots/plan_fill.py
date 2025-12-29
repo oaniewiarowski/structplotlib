@@ -336,8 +336,8 @@ def plot_plan(
                     color = str(value_text_color_above_threshold)
                 labels.append((xm, ym, _format_value(v_ctrl, value_fmt), ang, color))
 
-    # Context lines first (thin black) 
-    # TODO: Add a color option for the context lines and for label 
+    # Context lines first (thin black)
+    # TODO: Add a color option for the context lines and for label
     for xi, yi, xj, yj in context_lines:
         ax.plot(
             [xi, xj],
@@ -660,7 +660,12 @@ def plot_fill_plan(
     # If we're going to densify (k_per_segment>1) in numeric mode, require element breakdown data.
     # This prevents silently losing boundary "left/right" values at duplicate stations when
     # the upstream export is element-based (common for forces).
-    if (not label_only) and value_is_numeric and int(k_per_segment) > 1 and "element" not in df2.columns:
+    if (
+        (not label_only)
+        and value_is_numeric
+        and int(k_per_segment) > 1
+        and "element" not in df2.columns
+    ):
         raise ValueError(
             "[plot_fill_plan] k_per_segment>1 (densification) requires an 'element' column. "
             "Export element-level results that include Element/FrameElem (and ideally Elem Station), "
