@@ -95,18 +95,22 @@ All reductions use explicit groupby aggregation (never `drop_duplicates`) and st
 
 Canonical columns required throughout the package:
 
-- `story` *(string; may be `"ALL"` for SAP or for story-less data)*
-- `member_id` *(string; ETABS Unique Name / SAP Frame)*
-- `station` *(float; **distance from I-end** in model length units)*
-- `output_case` *(string)*
-- `case_type` *(string)*
-- `step_type` *(string; missing allowed → normalized to `""`)*
-- plan geometry endpoints:
-  - `x_i`, `y_i`, `x_j`, `y_j` *(float)*
+- `story` *(string; may be `"ALL"` for SAP or for story-less data)*: Story/level identifier used for grouping plots.
+- `member_id` *(string; ETABS “Unique Name” / SAP “Frame”)*: Physical frame/member identifier.
+- `station` *(float)*: **Global station** — distance along the *entire frame/member* measured from the I-end in model length units.
+- `output_case` *(string)*: Output/load case name (or combination name).
+- `case_type` *(string)*: Case type label (e.g., `LinStatic`, `Combination`).
+- `step_type` *(string; missing allowed → normalized to `""`)*: Step/result type label (e.g., `Max`, `Min`, `Step`).
+- plan geometry endpoints *(float)*:
+  - `x_i`, `y_i`, `x_j`, `y_j`: Member endpoints in plan used for drawing and station-to-plan interpolation.
 
-Optional (recommended for certain exports / debugging):
-- `element`
-- `elem_station`
+Optional (recommended for certain exports / debugging; **required for numeric densification when `k_per_segment>1`**):
+- `element` *(string)*: Finite element identifier within a frame (e.g., `109-2`). Used to preserve meaningful duplicate global stations at element boundaries.
+- `elem_station` *(float)*: **Element-local station** — distance along the *finite element only*. Resets to 0 at the start of each element and increases to the element length.
+
+**Do not confuse** `station` vs `elem_station`:
+- `station` is along the whole frame/member (global).
+- `elem_station` is along an individual FE segment (local) and resets at each element boundary.
 
 **Important:** Value columns (DCR, forces, etc.) are **not part of the schema**. They should pass through unchanged; the caller always specifies `value_col=...`.  
 Avoid hard-coding things like `DCR_MAX` (it’s not a CSI-native column).

@@ -109,6 +109,48 @@ def test_reduce_plan_station_aggregation_is_groupby_max():
     assert abs(float(a5.iloc[0]["value"]) - 1.2) < 1e-12
 
 
+def test_reduce_plan_preserves_duplicate_stations_across_elements_and_plot_handles_discontinuity():
+    # ETABS "Element Forces" style exports can contain duplicate Station values at element boundaries,
+    # with different values on each side (left/right). These are meaningful and must not be aggregated
+    # away across different elements.
+    df = pd.DataFrame(
+        {
+            "story": ["L1", "L1", "L1", "L1"],
+            "member_id": ["A1", "A1", "A1", "A1"],
+            "station": [0.0, 5.0, 5.0, 10.0],
+            "output_case": ["CASE_A", "CASE_A", "CASE_A", "CASE_A"],
+            "case_type": ["Combination", "Combination", "Combination", "Combination"],
+            "step_type": ["", "", "", ""],
+            "x_i": [0.0, 0.0, 0.0, 0.0],
+            "y_i": [0.0, 0.0, 0.0, 0.0],
+            "x_j": [10.0, 10.0, 10.0, 10.0],
+            "y_j": [0.0, 0.0, 0.0, 0.0],
+            "element": ["A1-1", "A1-1", "A1-2", "A1-2"],
+            # Think "left" vs "right" at the same node station
+            "V2": [0.0, -6.345, 0.124, 0.761],
+        }
+    )
+    red = reduce_plan(df, value_col="V2", station_agg="max")
+
+    s5 = red[(red["member_id"] == "A1") & (red["station"] == 5.0)]
+    assert len(s5) == 2
+    assert set(s5["element"].tolist()) == {"A1-1", "A1-2"}
+
+    # Plot should not crash even with duplicate stations (treated as a discontinuity).
+    fig, ax = plot_plan(
+        red,
+        story="L1",
+        value_col="value",
+        show_colorbar=False,
+        show_values=False,
+    )
+    assert len(ax.collections) == 1  # scatter exists
+
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
 def test_plot_smoke_and_annotation_matches_value():
     df = load_df("tests/data/etabs_min.csv", source="etabs", strict=True)
     env = envelope_by_member(df, value_col="DCR_MAX", mode="max")

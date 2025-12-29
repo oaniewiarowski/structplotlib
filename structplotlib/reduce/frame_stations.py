@@ -11,7 +11,10 @@ Key contract:
 
 Important behaviors (strict-by-default):
 - Duplicates at the same (story, member_id, station, output_case, case_type, step_type)
-  are aggregated (default: max).
+  are aggregated (default: max) **only when they refer to the same physical segment**.
+  If an ``element`` column is present (CSI element breakdown exports), duplicates at the
+  same station across *different* elements are preserved (left/right values at element
+  boundaries can differ and are meaningful).
 - reduce_plan() will FAIL LOUDLY if multiple (output_case, case_type, step_type) triples
   remain per (story, member_id). Filter/envelope first.
 """
@@ -72,6 +75,10 @@ def envelope_by_member(
     The governing triple is chosen by scanning stations within each triple, after
     aggregating duplicates at the station level.
 
+    If an ``element`` column is present, station-level aggregation is performed within
+    (story, member_id, element, station, case triple), so duplicate stations at element
+    boundaries are preserved for envelope scoring.
+
     - mode="max": pick triple whose station-maximum is largest
     - mode="min": pick triple whose station-minimum is smallest
     - mode="absmax": pick triple whose max(abs(value)) is largest
@@ -97,18 +104,6 @@ def envelope_by_member(
         where="envelope_by_member",
     )
 
-    # Safety guard: this function assumes member_id uniquely identifies a physical member.
-    # If the same member_id appears on multiple stories, envelope selection can cross stories.
-    story_counts = df.groupby("member_id", sort=False)["story"].nunique(dropna=False)
-    bad_story = story_counts[story_counts > 1]
-    if not bad_story.empty:
-        offenders = list(bad_story.index[:8])
-        raise ValueError(
-            "[envelope_by_member] member_id appears on multiple stories; envelope selection may cross stories. "
-            "Either ensure member_id is globally unique, or modify envelope_by_member to include story in its grouping keys. "
-            f"Examples of member_id with multiple stories: {offenders}"
-        )
-
     if station_agg not in ("max", "min", "mean"):
         raise ValueError(
             f"[envelope_by_member] station_agg must be one of 'max','min','mean', got {station_agg!r}"
@@ -119,11 +114,13 @@ def envelope_by_member(
         )
 
     # 1) Aggregate duplicates at the station level *within* each case triple
-    gkeys = ["member_id", "output_case", "case_type", "step_type", "station"]
+    gkeys = ["story", "member_id", "output_case", "case_type", "step_type", "station"]
+    if "element" in df.columns:
+        gkeys.append("element")
     station = df.groupby(gkeys, sort=False, as_index=False).agg(v=(value_col, station_agg))
 
     # 2) Score each triple for each member
-    tkeys = ["member_id", "output_case", "case_type", "step_type"]
+    tkeys = ["story", "member_id", "output_case", "case_type", "step_type"]
     if mode == "max":
         scores = station.groupby(tkeys, sort=False, as_index=False).agg(score=("v", "max"))
         ascending = False
@@ -137,14 +134,19 @@ def envelope_by_member(
 
     # Stable tie-breaking: mergesort keeps input order stable.
     scores = scores.sort_values(
-        ["member_id", "score"], ascending=[True, ascending], kind="mergesort"
+        ["story", "member_id", "score"], ascending=[True, True, ascending], kind="mergesort"
     )
-    ctrl = scores.groupby(["member_id"], sort=False, as_index=False).first()[
-        ["member_id", "output_case", "case_type", "step_type"]
+    ctrl = scores.groupby(["story", "member_id"], sort=False, as_index=False).first()[
+        ["story", "member_id", "output_case", "case_type", "step_type"]
     ]
 
-    out = df.merge(ctrl, on=["member_id", "output_case", "case_type", "step_type"], how="inner")
-    out = out.sort_values(["member_id", "station"], kind="mergesort")
+    out = df.merge(
+        ctrl, on=["story", "member_id", "output_case", "case_type", "step_type"], how="inner"
+    )
+    sort_cols = ["story", "member_id", "station"]
+    if "element" in out.columns:
+        sort_cols.append("element")
+    out = out.sort_values(sort_cols, kind="mergesort")
     return out.reset_index(drop=True)
 
 
@@ -178,9 +180,12 @@ def reduce_plan(
 
     Output columns:
         story, member_id, station, output_case, value, x_i,y_i,x_j,y_j, x,y
+        (and ``element`` / ``elem_station`` if present in the input)
 
     This:
     - aggregates duplicates per (member_id, station) using station_agg (default max)
+      If an ``element`` column is present, duplicates are aggregated per (element, station)
+      instead, preserving left/right values at element boundaries.
     - asserts each member_id has a single (output_case, case_type, step_type) triple
     - computes centerpoint x,y
 
@@ -213,7 +218,11 @@ def reduce_plan(
             f"Examples (story, member_id): {offenders}"
         )
 
-    reduced = df.groupby(["story", "member_id", "station"], sort=False, as_index=False).agg(
+    gkeys = ["story", "member_id", "station"]
+    if "element" in df.columns:
+        gkeys.append("element")
+
+    agg_kwargs = dict(
         value=(value_col, station_agg),
         output_case=("output_case", "first"),
         x_i=("x_i", "first"),
@@ -221,6 +230,12 @@ def reduce_plan(
         x_j=("x_j", "first"),
         y_j=("y_j", "first"),
     )
+    if "elem_station" in df.columns:
+        # Local station measured along the finite element (resets to 0 at each element).
+        # Useful for debugging and for downstream logic that needs element-local context.
+        agg_kwargs["elem_station"] = ("elem_station", "first")
+
+    reduced = df.groupby(gkeys, sort=False, as_index=False).agg(**agg_kwargs)
 
     reduced["x"] = 0.5 * (reduced["x_i"] + reduced["x_j"])
     reduced["y"] = 0.5 * (reduced["y_i"] + reduced["y_j"])
