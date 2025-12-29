@@ -89,7 +89,7 @@ Internally, structplotlib uses canonical snake_case column names. The minimum se
 - `step_type` (str; optional → normalized to `""`)
 - `x_i`, `y_i`, `x_j`, `y_j` (float)
 
-**Optional** (recommended for element-breakdown exports / debugging):
+**Optional** (recommended for element-breakdown exports / debugging; required for numeric densification when `k_per_segment>1`):
 - `story` (str) — if missing, the pipeline wrapper sets `"ALL"`
 - `element` (str)
 - `elem_station` (float)

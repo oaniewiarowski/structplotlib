@@ -18,12 +18,14 @@ from .._errors import SchemaError
 from .base import CANONICAL_CORE, REQUIRED_CANONICAL, ColumnSpec, require_columns
 
 Source = Literal["etabs", "sap2000"]
-Table = Literal["frame_dcr"]
+# "table" mainly selects a vendor header mapping. Value columns (DCR, forces, etc.)
+# always pass through and are chosen by the caller via value_col=...
+Table = Literal["frame_dcr", "frame_forces"]
 
 
 def _specs_for(source: Source, table: Table) -> tuple[ColumnSpec, ...]:
     """Return ColumnSpec tuples for the given source and table."""
-    if table != "frame_dcr":
+    if table not in ("frame_dcr", "frame_forces"):
         raise ValueError(f"Unknown table: {table!r}")
 
     if source == "etabs":

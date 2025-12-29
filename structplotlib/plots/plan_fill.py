@@ -164,6 +164,12 @@ def plot_plan(
         df.groupby("member_id", sort=False)[value_col].nunique(dropna=False) <= 1
     ).all()
     label_mode = (value_mode == "label") or (not value_is_numeric) or member_constant
+    if (not label_mode) and int(k_per_segment) > 1 and "element" not in df.columns:
+        raise ValueError(
+            "[plot_plan] k_per_segment>1 (densification) requires an 'element' column. "
+            "Include Element/FrameElem in your upstream dataframe (or use plot_fill_plan which normalizes these), "
+            "or set k_per_segment=1 to plot only at the provided stations."
+        )
     if selected_col is not None and selected_col not in df.columns:
         raise ValueError(
             f"[plot_plan] selected_col={selected_col!r} not found in dataframe columns"
@@ -272,17 +278,33 @@ def plot_plan(
         # Parameter along member: station assumed to be distance from I-end (length units)
         t_raw = st / member_len
 
-        if t_raw.size == 1 or k_per_segment < 2:
-            t_dense = t_raw
-        else:
-            # densify per interval between stations
-            chunks = [
-                np.linspace(t_raw[i], t_raw[i + 1], k_per_segment, endpoint=False)
-                for i in range(t_raw.size - 1)
-            ]
-            t_dense = np.concatenate(chunks + [np.array([t_raw[-1]])])
+        # NOTE: CSI exports can contain duplicate station values (often at element boundaries).
+        # Those duplicates are meaningful (left/right values may differ) and should be treated
+        # as a discontinuity. numpy.interp requires strictly increasing x, so we densify in
+        # piecewise segments split at non-increasing t_raw.
+        split_idx = np.where(np.diff(t_raw) <= 0)[0] + 1
+        seg_idxs = np.split(np.arange(t_raw.size), split_idx) if t_raw.size else []
 
-        v_dense = np.interp(t_dense, t_raw, vv)
+        t_dense_parts = []
+        v_dense_parts = []
+        for seg in seg_idxs:
+            t_seg = t_raw[seg]
+            v_seg = vv[seg]
+            if t_seg.size == 1 or k_per_segment < 2:
+                t_d = t_seg
+                v_d = v_seg
+            else:
+                chunks = [
+                    np.linspace(t_seg[i], t_seg[i + 1], k_per_segment, endpoint=False)
+                    for i in range(t_seg.size - 1)
+                ]
+                t_d = np.concatenate(chunks + [np.array([t_seg[-1]])])
+                v_d = np.interp(t_d, t_seg, v_seg)
+            t_dense_parts.append(t_d)
+            v_dense_parts.append(v_d)
+
+        t_dense = np.concatenate(t_dense_parts) if t_dense_parts else t_raw
+        v_dense = np.concatenate(v_dense_parts) if v_dense_parts else vv
         xs = xi + dx * t_dense
         ys = yi + dy * t_dense
 
@@ -314,7 +336,8 @@ def plot_plan(
                     color = str(value_text_color_above_threshold)
                 labels.append((xm, ym, _format_value(v_ctrl, value_fmt), ang, color))
 
-    # Context lines first (thin black)
+    # Context lines first (thin black) 
+    # TODO: Add a color option for the context lines and for label 
     for xi, yi, xj, yj in context_lines:
         ax.plot(
             [xi, xj],
@@ -632,6 +655,17 @@ def plot_fill_plan(
                 raise ValueError(
                     f"[plot_fill_plan] Multiple step_type values exist for non-envelope plot: {steps}. Pass step_type=... or prefilter upstream."
                 )
+
+    # Densification requirement:
+    # If we're going to densify (k_per_segment>1) in numeric mode, require element breakdown data.
+    # This prevents silently losing boundary "left/right" values at duplicate stations when
+    # the upstream export is element-based (common for forces).
+    if (not label_only) and value_is_numeric and int(k_per_segment) > 1 and "element" not in df2.columns:
+        raise ValueError(
+            "[plot_fill_plan] k_per_segment>1 (densification) requires an 'element' column. "
+            "Export element-level results that include Element/FrameElem (and ideally Elem Station), "
+            "or set k_per_segment=1 to plot only at the provided stations."
+        )
 
     # Reduce to plot-ready
     if label_only:
