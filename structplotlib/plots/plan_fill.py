@@ -25,46 +25,22 @@ from typing import Literal
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_numeric_dtype
+import warnings
 
-from ..reduce.frame_stations import (
-    Agg,
-    Mode,
-    envelope_by_member,
-    filter_cases,
-    reduce_plan,
-)
+from ..reduce.frame_stations import Agg, Mode
 from ..schema.base import require_columns
-from ..schema.csi import normalize_df, resolve_canonical_name
-
-_DEFAULT_LABEL_COLS = {"member_id", "output_case", "case_type", "step_type"}
-
-
-def _infer_figsize_from_bbox(df: pd.DataFrame, width_in: float) -> tuple[float, float]:
-    x = np.concatenate([df["x_i"].to_numpy(float), df["x_j"].to_numpy(float)])
-    y = np.concatenate([df["y_i"].to_numpy(float), df["y_j"].to_numpy(float)])
-    w = max(1e-9, float(np.max(x) - np.min(x)))
-    h = max(1e-9, float(np.max(y) - np.min(y)))
-    height_in = width_in * (h / w)
-    height_in = min(max(height_in, width_in * 0.3), width_in * 3.0)
-    return (width_in, height_in)
-
-
-def _format_value(v: float, value_fmt: str | Callable[[float], str]) -> str:
-    if callable(value_fmt):
-        return str(value_fmt(float(v)))
-    # format-string style: "{v:.2f}"
-    return str(value_fmt.format(v=float(v)))
-
-
-def _is_numeric_series(series: pd.Series) -> bool:
-    if is_numeric_dtype(series):
-        return True
-    non_null = series.dropna()
-    if non_null.empty:
-        return False
-    coerced = pd.to_numeric(non_null, errors="coerce")
-    return coerced.notna().all()
+from .plan_fill_primitives import (
+    _format_value,
+    _infer_figsize_from_bbox,
+    _is_numeric_series,
+    add_colorbar,
+    annotate_frames,
+    frames_station_xy,
+    plot_frames_fill,
+    plot_frames_lines,
+    prepare_plan_dataframe,
+    select_controlling_stations,
+)
 
 
 def plot_plan(
@@ -129,6 +105,14 @@ def plot_plan(
         - "numeric": force numeric coloring (unless member-constant triggers label-only)
         - "label": force label-only mode (useful for categorical values that may look numeric)
     """
+    warnings.warn(
+        "`plot_plan` is deprecated and will be removed in a future release. "
+        "Use axes-level composition (`structplotlib.plan_fill`, `structplotlib.plan_lines`, "
+        "`structplotlib.plan_show_values`, `structplotlib.plan_annotate`) or the wrapper "
+        "`structplotlib.planplot`.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     required = {"story", "member_id", "station", "x_i", "y_i", "x_j", "y_j", value_col}
     missing = sorted(required - set(df_reduced.columns))
     if missing:
@@ -149,7 +133,7 @@ def plot_plan(
         raise ValueError(f"[plot_plan] No rows for story={story!r}")
 
     df = df.sort_values(["member_id", "station"], kind="mergesort")
-    value_series = df[value_col]
+
     if value_mode not in ("auto", "numeric", "label"):
         raise ValueError(
             f"[plot_plan] value_mode must be one of 'auto','numeric','label', got {value_mode!r}"
@@ -159,11 +143,13 @@ def plot_plan(
     elif value_mode == "label":
         value_is_numeric = False
     else:
-        value_is_numeric = _is_numeric_series(value_series)
+        value_is_numeric = _is_numeric_series(df[value_col])
+
     member_constant = (
         df.groupby("member_id", sort=False)[value_col].nunique(dropna=False) <= 1
     ).all()
-    label_mode = (value_mode == "label") or (not value_is_numeric) or member_constant
+    label_mode = (value_mode == "label") or (not value_is_numeric) or bool(member_constant)
+
     if (not label_mode) and int(k_per_segment) > 1 and "element" not in df.columns:
         raise ValueError(
             "[plot_plan] k_per_segment>1 (densification) requires an 'element' column. "
@@ -181,213 +167,152 @@ def plot_plan(
     else:
         fig = ax.figure
 
-    # Decide which rows contribute colored markers / colormap scaling
-    if not label_mode:
-        if selected_col is not None:
-            sel_mask = df[selected_col].astype(bool).to_numpy()
-            if not np.any(sel_mask):
-                raise ValueError(
-                    "[plot_plan] selected_col provided but no members are selected (no colored markers to plot)"
-                )
-            vals_for_norm = df.loc[sel_mask, value_col].to_numpy(float)
-        else:
-            vals_for_norm = df[value_col].to_numpy(float)
+    # Split selected/context (member-level selection must be constant within a member)
+    if selected_col is not None:
+        g = df.groupby("member_id", sort=False)[selected_col].nunique(dropna=False)
+        bad = g[g > 1]
+        if not bad.empty:
+            mid = str(bad.index[0])
+            svals = list(pd.unique(df.loc[df["member_id"] == mid, selected_col]))[:6]
+            raise ValueError(
+                "[plot_plan] selected_col must be constant within a member_id. "
+                f"member_id={mid!r} has values {svals!r}"
+            )
+        sel_mask = df[selected_col].astype(bool).to_numpy()
+        if not np.any(sel_mask) and (not label_mode):
+            raise ValueError(
+                "[plot_plan] selected_col provided but no members are selected (no colored markers to plot)"
+            )
+        df_sel = df.loc[sel_mask].copy()
+        df_ctx = df.loc[~sel_mask].copy()
+    else:
+        df_sel = df
+        df_ctx = df.iloc[0:0].copy()
 
+    selected_linewidth = max(1.0, float(others_linewidth) * 2.5)
+
+    # Draw context lines first (thin black)
+    if not df_ctx.empty:
+        plot_frames_lines(
+            data=df_ctx,
+            ax=ax,
+            member="member_id",
+            line_kws=dict(color="black", linewidth=float(others_linewidth), zorder=1),
+        )
+
+    if label_mode:
+        # One segment per selected member
+        plot_frames_lines(
+            data=df_sel,
+            ax=ax,
+            member="member_id",
+            line_kws=dict(color="black", linewidth=float(selected_linewidth), zorder=2),
+        )
+
+        # One label per member at midpoint
+        df_one = (
+            df_sel.sort_values(["member_id", "station"], kind="mergesort")
+            .groupby("member_id", sort=False, as_index=False)
+            .first()
+            .copy()
+        )
+        nunique = df_sel.groupby("member_id", sort=False)[value_col].nunique(dropna=False)
+        bad = nunique[nunique > 1]
+        if not bad.empty:
+            mid = str(bad.index[0])
+            examples = list(pd.unique(df_sel.loc[df_sel["member_id"] == mid, value_col]))[:6]
+            raise ValueError(
+                "[plot_plan] label-only mode requires values to be constant within each member_id. "
+                f"member_id={mid!r} has {int(bad.iloc[0])} distinct values in {value_col!r}. "
+                f"Examples: {examples!r}"
+            )
+
+        if value_is_numeric:
+            vals = df_one[value_col].to_numpy(float)
+            if annotate_threshold is not None:
+                m = np.abs(vals) >= float(annotate_threshold)
+                df_one = df_one.loc[df_one.index[m]].copy()
+                txt_color = (
+                    str(value_text_color_above_threshold)
+                    if value_text_color_above_threshold is not None
+                    else str(value_text_color)
+                )
+            else:
+                txt_color = str(value_text_color)
+            annotate_frames(
+                data=df_one,
+                ax=ax,
+                text=lambda r: _format_value(float(r[value_col]), value_fmt),
+                where="midpoint",
+                rotate_with_member=True,
+                text_kws=dict(fontsize=float(fontsize), color=txt_color),
+            )
+        else:
+            annotate_frames(
+                data=df_one,
+                ax=ax,
+                text=lambda r: str(r[value_col]),
+                where="midpoint",
+                rotate_with_member=True,
+                text_kws=dict(fontsize=float(fontsize), color=str(value_text_color)),
+            )
+    else:
+        # Norm scaling (selected-only if selection is active)
+        vals_for_norm = df_sel[value_col].to_numpy(float)
         if norm_min is None:
             norm_min = float(np.min(vals_for_norm))
         if norm_max is None:
             norm_max = float(np.max(vals_for_norm))
 
-    xs_all, ys_all, vals_all = [], [], []
-    labels = []  # (x,y,text,angle_deg,color)
-    context_lines = []  # (xi,yi,xj,yj)
-    member_lines = []  # (xi,yi,xj,yj,linewidth)
-    selected_linewidth = max(1.0, float(others_linewidth) * 2.5)
-
-    for mid, g in df.groupby("member_id", sort=False):
-        r0 = g.iloc[0]
-        xi, yi, xj, yj = (
-            float(r0["x_i"]),
-            float(r0["y_i"]),
-            float(r0["x_j"]),
-            float(r0["y_j"]),
-        )
-        dx, dy = xj - xi, yj - yi
-        member_len = float(np.hypot(dx, dy))
-        if member_len < 1e-12:
-            # degenerate in plan; skip densification, but still allow annotation at the point
-            member_len = 1.0
-
-        # Member-level selection
-        selected = True
-        if selected_col is not None:
-            svals = pd.unique(g[selected_col])
-            if len(svals) != 1:
-                raise ValueError(
-                    f"[plot_plan] selected_col must be constant within a member_id. member_id={mid!r} has values {list(svals)!r}"
-                )
-            selected = bool(svals[0])
-
-        if not selected:
-            context_lines.append((xi, yi, xj, yj))
-            continue
-
-        if label_mode:
-            # Label-only mode assumes the value is constant within a member.
-            # If the caller passes non-reduced/categorical data that varies along stations,
-            # fail loudly rather than picking an arbitrary label.
-            nunique = int(g[value_col].nunique(dropna=False))
-            if nunique > 1:
-                examples = list(pd.unique(g[value_col]))[:6]
-                raise ValueError(
-                    "[plot_plan] label-only mode requires values to be constant within each member_id. "
-                    f"member_id={mid!r} has {nunique} distinct values in {value_col!r}. "
-                    f"Examples: {examples!r}"
-                )
-            member_lines.append((xi, yi, xj, yj, selected_linewidth))
-            v_label = g[value_col].iloc[0]
-            if value_is_numeric:
-                v_label = float(v_label)
-                if (annotate_threshold is not None) and (abs(v_label) < float(annotate_threshold)):
-                    continue
-                label_text = _format_value(v_label, value_fmt)
-            else:
-                label_text = str(v_label)
-            xm = 0.5 * (xi + xj)
-            ym = 0.5 * (yi + yj)
-            ang = float(np.degrees(np.arctan2(dy, dx)))
-            color = str(value_text_color)
-            if (
-                value_is_numeric
-                and annotate_threshold is not None
-                and value_text_color_above_threshold is not None
-                and abs(v_label) >= float(annotate_threshold)
-            ):
-                color = str(value_text_color_above_threshold)
-            labels.append((xm, ym, label_text, ang, color))
-            continue
-
-        st = g["station"].to_numpy(float)
-        vv = g[value_col].to_numpy(float)
-
-        # Ensure station is sorted ascending for interpolation
-        order = np.argsort(st, kind="mergesort")
-        st = st[order]
-        vv = vv[order]
-
-        # Parameter along member: station assumed to be distance from I-end (length units)
-        t_raw = st / member_len
-
-        # NOTE: CSI exports can contain duplicate station values (often at element boundaries).
-        # Those duplicates are meaningful (left/right values may differ) and should be treated
-        # as a discontinuity. numpy.interp requires strictly increasing x, so we densify in
-        # piecewise segments split at non-increasing t_raw.
-        split_idx = np.where(np.diff(t_raw) <= 0)[0] + 1
-        seg_idxs = np.split(np.arange(t_raw.size), split_idx) if t_raw.size else []
-
-        t_dense_parts = []
-        v_dense_parts = []
-        for seg in seg_idxs:
-            t_seg = t_raw[seg]
-            v_seg = vv[seg]
-            if t_seg.size == 1 or k_per_segment < 2:
-                t_d = t_seg
-                v_d = v_seg
-            else:
-                chunks = [
-                    np.linspace(t_seg[i], t_seg[i + 1], k_per_segment, endpoint=False)
-                    for i in range(t_seg.size - 1)
-                ]
-                t_d = np.concatenate(chunks + [np.array([t_seg[-1]])])
-                v_d = np.interp(t_d, t_seg, v_seg)
-            t_dense_parts.append(t_d)
-            v_dense_parts.append(v_d)
-
-        t_dense = np.concatenate(t_dense_parts) if t_dense_parts else t_raw
-        v_dense = np.concatenate(v_dense_parts) if v_dense_parts else vv
-        xs = xi + dx * t_dense
-        ys = yi + dy * t_dense
-
-        xs_all.append(xs)
-        ys_all.append(ys)
-        vals_all.append(v_dense)
-
-        if show_values:
-            # controlling station: abs max
-            i_ctrl = int(np.argmax(np.abs(vv)))
-            v_ctrl = float(vv[i_ctrl])
-            if (annotate_threshold is None) or (abs(v_ctrl) >= float(annotate_threshold)):
-                t_ctrl = float(t_raw[i_ctrl])
-                xm = xi + dx * t_ctrl
-                ym = yi + dy * t_ctrl
-
-                # shift label along unit normal to the member
-                nx, ny = (-dy / member_len, dx / member_len)
-                xm += nx * float(label_shift)
-                ym += ny * float(label_shift)
-
-                ang = float(np.degrees(np.arctan2(dy, dx)))
-                color = str(value_text_color)
-                if (
-                    annotate_threshold is not None
-                    and value_text_color_above_threshold is not None
-                    and abs(v_ctrl) >= float(annotate_threshold)
-                ):
-                    color = str(value_text_color_above_threshold)
-                labels.append((xm, ym, _format_value(v_ctrl, value_fmt), ang, color))
-
-    # Context lines first (thin black)
-    # TODO: Add a color option for the context lines and for label
-    for xi, yi, xj, yj in context_lines:
-        ax.plot(
-            [xi, xj],
-            [yi, yj],
-            color="black",
-            linewidth=float(others_linewidth),
-            zorder=1,
-        )
-
-    for xi, yi, xj, yj, lw in member_lines:
-        ax.plot([xi, xj], [yi, yj], color="black", linewidth=lw, zorder=2)
-
-    if xs_all:
-        xs_all = np.concatenate(xs_all)
-        ys_all = np.concatenate(ys_all)
-        vals = np.concatenate(vals_all)
-
-        sc = ax.scatter(
-            xs_all,
-            ys_all,
-            s=float(marker_size),
-            c=vals,
-            cmap=plt.get_cmap(cmap),
+        out = plot_frames_fill(
+            data=df_sel,
+            ax=ax,
+            member="member_id",
+            station="station",
+            value=value_col,
+            densify=("linear" if int(k_per_segment) > 1 else "none"),
+            k_per_segment=int(k_per_segment),
+            cmap=str(cmap),
             vmin=norm_min,
             vmax=norm_max,
-            marker="s",
-            linewidths=0,
-            alpha=0.95,
-            zorder=3,
+            scatter_kws=dict(s=float(marker_size), marker="s", linewidths=0, alpha=0.95, zorder=3),
         )
-
         if show_colorbar:
-            cb = fig.colorbar(sc, ax=ax, location="bottom", fraction=0.05, pad=0.0, aspect=10)
-            cb.set_label(value_name or value_col)
-    else:
-        sc = None  # no selected markers
+            add_colorbar(
+                mappable=out["markers"],
+                ax=ax,
+                label=(value_name or value_col),
+                location="bottom",
+                colorbar_kws=dict(fraction=0.05, pad=0.0, aspect=10),
+            )
 
-    for x, y, txt, ang, color in labels:
-        ax.text(
-            x,
-            y,
-            txt,
-            ha="center",
-            va="bottom",
-            rotation=ang,
-            rotation_mode="anchor",
-            fontsize=float(fontsize),
-            color=color,
-            zorder=5,
-        )
+        if show_values:
+            df_ctrl = select_controlling_stations(
+                data=df_sel, member="member_id", station="station", value=value_col, mode="absmax"
+            )
+            df_ctrl = frames_station_xy(data=df_ctrl, station="station", out_x="x", out_y="y")
+            vals = df_ctrl[value_col].to_numpy(float)
+            if annotate_threshold is not None:
+                m = np.abs(vals) >= float(annotate_threshold)
+                df_ctrl = df_ctrl.loc[df_ctrl.index[m]].copy()
+                txt_color = (
+                    str(value_text_color_above_threshold)
+                    if value_text_color_above_threshold is not None
+                    else str(value_text_color)
+                )
+            else:
+                txt_color = str(value_text_color)
+            annotate_frames(
+                data=df_ctrl,
+                ax=ax,
+                x="x",
+                y="y",
+                text=lambda r: _format_value(float(r[value_col]), value_fmt),
+                where="xy",
+                rotate_with_member=True,
+                normal_offset=float(label_shift),
+                text_kws=dict(fontsize=float(fontsize), color=txt_color),
+            )
 
     ax.set_aspect("equal", adjustable="datalim")
     ax.axis("off")
@@ -414,6 +339,13 @@ def plot_plan(
 
 def plot_plan_by_story(df_reduced: pd.DataFrame, **kwargs):
     """Return {story: (fig, ax)} for each story present in the dataframe."""
+    warnings.warn(
+        "`plot_plan_by_story` is deprecated and will be removed in a future release. "
+        "Use `structplotlib.planplot(..., story=None)` for multi-story wrappers, or loop over "
+        "stories and call axes-level functions (`plan_fill` / `plan_lines`) yourself.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     require_columns(df_reduced, ["story"], where="plot_plan_by_story")
     out = {}
     for story in pd.unique(df_reduced["story"]):
@@ -479,110 +411,39 @@ def plot_fill_plan(
         Notes: when return_df=True, the returned per-story dataframe includes an ``output_case`` column
         to aid debugging of which governing case was used for each plotted member.
     """
-
-    # Optional boundary normalization: allow passing raw ETABS/SAP exports directly.
-    value_col_eff = value_col
-
-    if normalize:
-        # If already canonical (except optional story), do not require `source`.
-        canonical_no_story = {
-            "member_id",
-            "station",
-            "output_case",
-            "case_type",
-            "step_type",
-            "x_i",
-            "y_i",
-            "x_j",
-            "y_j",
-        }
-        if not canonical_no_story.issubset(set(df.columns)):
-            if source is None:
-                raise ValueError(
-                    "[plot_fill_plan] normalize=True but dataframe is not canonical and source=None. "
-                    "Pass source='etabs' or source='sap2000', or call structplotlib.schema.normalize_df/load_df upstream."
-                )
-            df = normalize_df(
-                df,
-                source=source,
-                table=table,
-                strict=strict,
-                enforce_preferred_input_names=enforce_preferred_input_names,
-            )
-
-        # If the user specified an input/header spelling that got renamed during normalization,
-        # resolve it to the canonical column name.
-        if value_col_eff not in df.columns and source is not None:
-            canon = resolve_canonical_name(value_col_eff, source=source, table=table)
-            if canon is not None and canon in df.columns:
-                value_col_eff = canon
-    else:
-        # normalize=False: interpret value_col as-is
-        pass
-
-    # minimal canonical-ish requirements (defaults applied below)
-    if "story" not in df.columns:
-        df = df.copy()
-        df["story"] = "ALL"
-    if "step_type" not in df.columns:
-        df = df.copy()
-        df["step_type"] = ""
-    else:
-        # tolerate NaN step types from CSV exports; treat as blank
-        df = df.copy()
-        st = df["step_type"]
-        st = st.where(~st.isna(), "")
-        # Some exports stringify NaNs as "nan"/"NaN"
-        if st.dtype == object or str(st.dtype).startswith("string"):
-            st = st.replace({"nan": "", "NaN": "", "<NA>": ""})
-        df["step_type"] = st
-
-    require_columns(
-        df,
-        [
-            "story",
-            "member_id",
-            "station",
-            "output_case",
-            "case_type",
-            "step_type",
-            "x_i",
-            "y_i",
-            "x_j",
-            "y_j",
-            value_col_eff,
-        ],
-        where="plot_fill_plan",
+    warnings.warn(
+        "`plot_fill_plan` is deprecated and will be removed in a future release. "
+        "Use `structplotlib.planplot` for the wrapper behavior, or compose the pipeline explicitly "
+        "(`normalize_df`/`filter_cases`/`envelope_by_member`/`reduce_plan`) plus axes-level plotting "
+        "(`plan_fill`, `plan_show_values`, etc.).",
+        DeprecationWarning,
+        stacklevel=2,
     )
-    if value_mode not in ("auto", "numeric", "label"):
-        raise ValueError(
-            f"[plot_fill_plan] value_mode must be one of 'auto','numeric','label', got {value_mode!r}"
-        )
+    prep = prepare_plan_dataframe(
+        df,
+        source=source,
+        table=table,
+        normalize=normalize,
+        strict=strict,
+        enforce_preferred_input_names=enforce_preferred_input_names,
+        value_col=value_col,
+        value_mode=value_mode,
+        cases=cases,
+        envelope=envelope,
+        reduction_mode=reduction_mode,
+        station_agg=station_agg,
+        step_type=step_type,
+        story_name=story_name,
+    )
 
-    # Some canonical columns are categorical "labels" even if they look numeric.
-    # Example: member_id may be "1", "2", ... but should be shown as a label.
-    value_is_numeric_inferred = _is_numeric_series(df[value_col_eff])
-    if value_mode == "numeric":
-        value_mode_eff: Literal["auto", "numeric", "label"] = "numeric"
-        value_is_numeric = True
-    elif value_mode == "label":
-        value_mode_eff = "label"
-        value_is_numeric = False
-    else:
-        if value_col_eff in _DEFAULT_LABEL_COLS:
-            value_mode_eff = "label"
-            value_is_numeric = False
-        else:
-            value_mode_eff = "auto"
-            value_is_numeric = bool(value_is_numeric_inferred)
+    df_red = prep.df.copy()
 
-    df0 = df.copy()
-    if story_name is not None:
-        df0 = df0[df0["story"] == story_name].copy()
-
-    # Member selection map from frame_filter
-    selected_map = None
+    # Member selection map from frame_filter (context vs selected)
+    selected_col = None
     if frame_filter is not None:
+        df0 = df.copy()
+        if story_name is not None and "story" in df0.columns:
+            df0 = df0[df0["story"] == story_name].copy()
         if isinstance(frame_filter, list):
             frame_filter = pd.Series(frame_filter, index=df0.index)
         else:
@@ -592,7 +453,6 @@ def plot_fill_plan(
                 "[plot_fill_plan] frame_filter must be the same length as df after story_name filtering"
             )
         df0["_selected_row"] = frame_filter.astype(bool).to_numpy()
-
         g = df0.groupby(["story", "member_id"], sort=False)["_selected_row"].nunique(dropna=False)
         bad = g[g > 1]
         if not bad.empty:
@@ -606,156 +466,41 @@ def plot_fill_plan(
             .first()
             .rename(columns={"_selected_row": "selected"})
         )
-        df0 = df0.drop(columns=["_selected_row"])
+        df_red = df_red.merge(selected_map, on=["story", "member_id"], how="left")
+        df_red["selected"] = df_red["selected"].fillna(True).astype(bool)
+        selected_col = "selected"
 
-    # Filter cases
-    df1 = filter_cases(df0, cases)
-
-    # Decide label-only mode early (affects step_type handling + reduction path).
-    # "label" forces label-only; otherwise, label-only triggers if values are non-numeric
-    # or if each member has a single value (common for per-member properties).
-    if value_mode_eff == "label":
-        label_only = True
-    else:
-        # per-member constancy check on the already story/case-filtered data
-        member_constant = (
-            df1.groupby(["story", "member_id"], sort=False)[value_col_eff]
-            .nunique(dropna=False)
-            .le(1)
-            .all()
-        )
-        label_only = (not value_is_numeric) or bool(member_constant)
-
-    # Determine envelope default
-    if cases is None:
-        cases_eff = list(pd.unique(df1["output_case"]))
-    else:
-        cases_eff = list(cases)
-    if envelope is None:
-        envelope = (not label_only) and value_is_numeric and len(cases_eff) > 1
-    if label_only and envelope:
-        envelope = False
-
-    if envelope:
-        df2 = envelope_by_member(
-            df1, value_col=value_col_eff, mode=reduction_mode, station_agg=station_agg
-        )
-    else:
-        df2 = df1.copy()
-        # If multiple step types exist, force the user to pick one (unless we're in label-only mode).
-        steps = list(pd.unique(df2["step_type"]))
-        if step_type is not None:
-            if step_type not in steps:
-                raise ValueError(
-                    f"[plot_fill_plan] step_type={step_type!r} not found. Available: {steps}"
-                )
-            df2 = df2[df2["step_type"] == step_type].copy()
-        else:
-            if (not label_only) and len(steps) > 1:
-                raise ValueError(
-                    f"[plot_fill_plan] Multiple step_type values exist for non-envelope plot: {steps}. Pass step_type=... or prefilter upstream."
-                )
-
-    # Densification requirement:
-    # If we're going to densify (k_per_segment>1) in numeric mode, require element breakdown data.
-    # This prevents silently losing boundary "left/right" values at duplicate stations when
-    # the upstream export is element-based (common for forces).
-    if (
-        (not label_only)
-        and value_is_numeric
-        and int(k_per_segment) > 1
-        and "element" not in df2.columns
-    ):
+    # Densification requirement: preserve legacy behavior
+    if (not prep.label_only) and prep.value_is_numeric and int(k_per_segment) > 1 and "element" not in df_red.columns:
         raise ValueError(
             "[plot_fill_plan] k_per_segment>1 (densification) requires an 'element' column. "
             "Export element-level results that include Element/FrameElem (and ideally Elem Station), "
             "or set k_per_segment=1 to plot only at the provided stations."
         )
 
-    # Reduce to plot-ready
-    if label_only:
-        # For label-only plots, we do not need (and must not require) a single case triple per member.
-        # We keep one representative row per (story, member_id) for geometry + label value.
-        # However, the label value itself must still be constant within a member.
-        nval = df2.groupby(["story", "member_id"], sort=False)[value_col_eff].nunique(dropna=False)
-        bad_val = nval[nval > 1]
-        if not bad_val.empty:
-            offenders = list(bad_val.index[:8])
-            raise ValueError(
-                "[plot_fill_plan] label-only mode requires the plotted value to be constant within each (story, member_id). "
-                f"{value_col_eff!r} varies for some members. Examples (story, member_id): {offenders}. "
-                "Filter to a single case/step first, or use a numeric plot/envelope if appropriate."
-            )
-
-        geom = df2.groupby(["story", "member_id"], sort=False)[
-            ["x_i", "y_i", "x_j", "y_j"]
-        ].nunique(dropna=False)
-        bad_geom = geom[(geom > 1).any(axis=1)]
-        if not bad_geom.empty:
-            offenders = list(bad_geom.index[:8])
-            raise ValueError(
-                "[plot_fill_plan] Inconsistent geometry within some members (endpoints vary across rows). "
-                f"Examples (story, member_id): {offenders}"
-            )
-
-        df2s = df2.sort_values(["story", "member_id", "station"], kind="mergesort")
-        df_red = df2s.groupby(["story", "member_id"], sort=False, as_index=False).first().copy()
-        df_red = df_red.assign(
-            value=df_red[value_col_eff],
-            x=0.5 * (df_red["x_i"] + df_red["x_j"]),
-            y=0.5 * (df_red["y_i"] + df_red["y_j"]),
-        )
-        # keep canonical-ish columns; plot_plan requires station + endpoints; value is the label
-        keep_cols = [
-            "story",
-            "member_id",
-            "station",
-            "output_case",
-            "case_type",
-            "step_type",
-            "x_i",
-            "y_i",
-            "x_j",
-            "y_j",
-            "x",
-            "y",
-            "value",
-        ]
-        df_red = df_red[[c for c in keep_cols if c in df_red.columns]].copy()
-    else:
-        df_red = reduce_plan(df2, value_col=value_col_eff, station_agg=station_agg)
-
-    # Attach selection info
-    if selected_map is not None:
-        df_red = df_red.merge(selected_map, on=["story", "member_id"], how="left")
-        df_red["selected"] = df_red["selected"].fillna(True).astype(bool)
-        selected_col = "selected"
-    else:
-        selected_col = None
-
     # Label for title
     if output_case_label is None:
-        if envelope:
+        if prep.envelope:
             output_case_label = f"Envelope({reduction_mode})"
-        elif cases_eff:
-            output_case_label = str(cases_eff[0])
+        elif prep.cases_eff:
+            output_case_label = str(prep.cases_eff[0])
 
     figs = {}
     dfs = {}
-    for story in pd.unique(df_red["story"]):
-        title_parts = [str(story)]
+    for st in pd.unique(df_red["story"]):
+        title_parts = [str(st)]
         if output_case_label:
             title_parts.append(str(output_case_label))
         title_parts.append(str(value_name or value_col))
         title = " — ".join(title_parts)
 
-        df_story = df_red[df_red["story"] == story].copy()
+        df_story = df_red[df_red["story"] == st].copy()
         fig, ax = plot_plan(
             df_story,
-            story=str(story),
+            story=str(st),
             value_col="value",
             value_name=value_name or value_col,
-            value_mode=("label" if label_only else "auto"),
+            value_mode=("label" if prep.label_only else "auto"),
             norm_min=norm_min,
             norm_max=norm_max,
             k_per_segment=k_per_segment,
@@ -775,8 +520,8 @@ def plot_fill_plan(
             fontsize=fontsize,
             watermark=watermark,
         )
-        figs[str(story)] = (fig, ax)
+        figs[str(st)] = (fig, ax)
         if return_df:
-            dfs[str(story)] = df_story.reset_index(drop=True)
+            dfs[str(st)] = df_story.reset_index(drop=True)
 
     return (figs, dfs) if return_df else figs
