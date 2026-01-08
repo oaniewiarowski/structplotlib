@@ -11,13 +11,13 @@ Matplotlib plotting utilities.
 # NOTE: Legacy API (`plot_plan`, `plot_plan_by_story`, `plot_fill_plan`) is deprecated.
 # It remains available temporarily for compatibility but will be removed soon.
 
+from .plan import planplot
+from .plan_axes import plan_annotate, plan_colorbar, plan_fill, plan_lines, plan_show_values
 from .plan_fill import (
     plot_fill_plan,
     plot_plan,
     plot_plan_by_story,
 )
-from .plan import planplot
-from .plan_axes import plan_annotate, plan_colorbar, plan_fill, plan_lines, plan_show_values
 
 __all__ = [
     "plot_plan",

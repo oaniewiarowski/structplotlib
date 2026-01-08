@@ -94,11 +94,7 @@ def test_envelope_by_member_picks_controlling_case():
         gkeys = ["story", "member_id", "output_case", "case_type", "step_type", "station"]
         if "element" in raw.columns:
             gkeys.append("element")
-        station = (
-            raw.groupby(gkeys, sort=False, as_index=False)
-            .agg(v=("DCR_MAX", "max"))
-            .copy()
-        )
+        station = raw.groupby(gkeys, sort=False, as_index=False).agg(v=("DCR_MAX", "max")).copy()
         tkeys = ["story", "member_id", "output_case", "case_type", "step_type"]
         scores = station.groupby(tkeys, sort=False, as_index=False).agg(score=("v", "max"))
         scores = scores.sort_values(
@@ -324,11 +320,7 @@ def test_plot_fill_plan_return_df_includes_output_case_for_debugging():
         gkeys = ["story", "member_id", "output_case", "case_type", "step_type", "station"]
         if "element" in raw_df.columns:
             gkeys.append("element")
-        station = (
-            raw_df.groupby(gkeys, sort=False, as_index=False)
-            .agg(v=("DCR_MAX", "max"))
-            .copy()
-        )
+        station = raw_df.groupby(gkeys, sort=False, as_index=False).agg(v=("DCR_MAX", "max")).copy()
         tkeys = ["story", "member_id", "output_case", "case_type", "step_type"]
         scores = station.groupby(tkeys, sort=False, as_index=False).agg(score=("v", "max"))
         scores = scores.sort_values(

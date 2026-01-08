@@ -26,7 +26,7 @@ Input contracts
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,7 +34,11 @@ import pandas as pd
 
 from .plan_fill_primitives import (
     add_colorbar as _add_colorbar,
+)
+from .plan_fill_primitives import (
     annotate_frames as _annotate_frames,
+)
+from .plan_fill_primitives import (
     frames_station_xy,
     plot_frames_fill,
     plot_frames_lines,
@@ -316,5 +320,3 @@ def plan_colorbar(
         location=location,
         colorbar_kws=dict(colorbar_kws),
     )
-
-

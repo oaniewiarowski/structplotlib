@@ -34,7 +34,6 @@ import pandas as pd
 from .plan_axes import plan_annotate, plan_colorbar, plan_fill, plan_lines, plan_show_values
 from .plan_fill_primitives import _infer_figsize_from_bbox, prepare_plan_dataframe
 
-
 Kind = Literal["auto", "fill", "lines"]
 
 
@@ -288,7 +287,8 @@ def planplot(
 
             # Labels: default to plotted value; override via `label=...`
             if label_fn is None:
-                label_fn_eff = lambda r: str(r["value"])
+                def label_fn_eff(r):
+                    return str(r["value"])
             else:
                 label_fn_eff = label_fn
 
@@ -390,12 +390,16 @@ def planplot(
             )
 
         if return_artists:
-            return fig, ax0, PlanArtists(
-                context_lines=ctx_lines,
-                lines=lines,
-                markers=markers,
-                colorbar=cb,
-                texts=texts if texts else None,
+            return (
+                fig,
+                ax0,
+                PlanArtists(
+                    context_lines=ctx_lines,
+                    lines=lines,
+                    markers=markers,
+                    colorbar=cb,
+                    texts=texts if texts else None,
+                ),
             )
         return fig, ax0
 
@@ -410,6 +414,3 @@ def planplot(
         df_story = df_red[df_red["story"] == st].copy()
         out[str(st)] = _plot_one_story(df_story, str(st))
     return out
-
-
-

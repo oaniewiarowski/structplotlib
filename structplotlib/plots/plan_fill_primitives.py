@@ -360,10 +360,10 @@ def annotate_frames(
             dx = xj - xi
             dy = yj - yi
             L = np.hypot(dx, dy)
-            Ls = np.where(L < 1e-12, 1.0, L)
+            L = np.where(L < 1e-12, 1.0, L)
             angs = np.degrees(np.arctan2(dy, dx)) if rotate_with_member else np.zeros(len(df))
-            nx = -dy / Ls
-            ny = dx / Ls
+            nx = -dy / L
+            ny = dx / L
         else:
             angs = np.zeros(len(df), dtype=float)
             nx = np.zeros(len(df), dtype=float)
@@ -376,7 +376,7 @@ def annotate_frames(
         dx = xj - xi
         dy = yj - yi
         L = np.hypot(dx, dy)
-        Ls = np.where(L < 1e-12, 1.0, L)
+        L = np.where(L < 1e-12, 1.0, L)
         if where == "midpoint":
             xs = 0.5 * (xi + xj)
             ys = 0.5 * (yi + yj)
@@ -393,8 +393,8 @@ def annotate_frames(
             angs = np.degrees(np.arctan2(dy, dx))
         else:
             angs = np.zeros(len(df), dtype=float)
-        nx = -dy / Ls
-        ny = dx / Ls
+        nx = -dy / L
+        ny = dx / L
 
     xs = xs + float(normal_offset) * nx
     ys = ys + float(normal_offset) * ny
@@ -407,7 +407,11 @@ def annotate_frames(
         return str(text)
 
     colors = None
-    if threshold_col is not None and threshold is not None and text_color_above_threshold is not None:
+    if (
+        threshold_col is not None
+        and threshold is not None
+        and text_color_above_threshold is not None
+    ):
         vals = df[threshold_col].to_numpy(float)
         colors = np.where(np.abs(vals) >= float(threshold), str(text_color_above_threshold), None)
 
@@ -620,9 +624,7 @@ def prepare_plan_dataframe(
                 f"{value_col_eff!r} varies for some members. Examples (story, member_id): {offenders}."
             )
         df2s = df2.sort_values(["story", "member_id", "station"], kind="mergesort")
-        df_red = (
-            df2s.groupby(["story", "member_id"], sort=False, as_index=False).first().copy()
-        )
+        df_red = df2s.groupby(["story", "member_id"], sort=False, as_index=False).first().copy()
         df_red = df_red.assign(
             value=df_red[value_col_eff],
             x=0.5 * (df_red["x_i"] + df_red["x_j"]),
@@ -655,5 +657,3 @@ def prepare_plan_dataframe(
         envelope=bool(envelope),
         cases_eff=cases_eff,
     )
-
-

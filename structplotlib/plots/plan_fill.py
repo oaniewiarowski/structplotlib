@@ -19,13 +19,13 @@ Two layers:
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from typing import Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import warnings
 
 from ..reduce.frame_stations import Agg, Mode
 from ..schema.base import require_columns
@@ -471,7 +471,12 @@ def plot_fill_plan(
         selected_col = "selected"
 
     # Densification requirement: preserve legacy behavior
-    if (not prep.label_only) and prep.value_is_numeric and int(k_per_segment) > 1 and "element" not in df_red.columns:
+    if (
+        (not prep.label_only)
+        and prep.value_is_numeric
+        and int(k_per_segment) > 1
+        and "element" not in df_red.columns
+    ):
         raise ValueError(
             "[plot_fill_plan] k_per_segment>1 (densification) requires an 'element' column. "
             "Export element-level results that include Element/FrameElem (and ideally Elem Station), "
