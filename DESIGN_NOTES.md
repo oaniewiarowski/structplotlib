@@ -38,7 +38,7 @@ These scenarios represent how engineers actually use CSI results in practice. Th
 **User wants:** pass in a df already filtered upstream (e.g., one story, one case) and just plot.
 
 **Expected behavior:**
-- `plot_fill_plan(df, normalize=..., envelope=False, cases=None)` works.
+- `planplot(df, normalize=..., envelope=False, cases=None)` works.
 - Functions still validate canonical columns and loudly error if required columns are missing.
 - Plotting is deterministic and labels match the plotted values.
 

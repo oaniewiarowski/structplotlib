@@ -4,7 +4,14 @@ structplotlib
 Strict, small plotting utilities for station-level post-processed CSI (ETABS/SAP2000) frame data.
 """
 
-from .plots.plan_fill import plot_fill_plan, plot_plan, plot_plan_by_story
+from .plots.plan import planplot
+from .plots.plan_axes import (
+    plan_annotate,
+    plan_colorbar,
+    plan_fill,
+    plan_lines,
+    plan_show_values,
+)
 from .reduce.frame_stations import (
     Agg,
     Mode,
@@ -29,7 +36,10 @@ __all__ = [
     "Agg",
     "Mode",
     # Plotting
-    "plot_plan",
-    "plot_plan_by_story",
-    "plot_fill_plan",
+    "planplot",
+    "plan_lines",
+    "plan_fill",
+    "plan_annotate",
+    "plan_show_values",
+    "plan_colorbar",
 ]

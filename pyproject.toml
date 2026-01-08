@@ -93,5 +93,9 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["structplotlib"]
 
+[tool.ruff.lint.pep8-naming]
+# Allow common math/engineering single-letter conventions (e.g., member length L).
+ignore-names = ["L"]
+
 [tool.black]
 line-length = 100

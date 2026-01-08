@@ -4,17 +4,18 @@ structplotlib.plots
 
 Matplotlib plotting utilities.
 
-- plan_fill: Plan view fill diagrams with station-level coloring
+- plan_axes: Axes-level composable helpers (lines/fill/labels/colorbar)
+- plan: Seaborn-esque high-level wrappers built on composable primitives
 """
 
-from .plan_fill import (
-    plot_fill_plan,
-    plot_plan,
-    plot_plan_by_story,
-)
+from .plan import planplot
+from .plan_axes import plan_annotate, plan_colorbar, plan_fill, plan_lines, plan_show_values
 
 __all__ = [
-    "plot_plan",
-    "plot_plan_by_story",
-    "plot_fill_plan",
+    "planplot",
+    "plan_lines",
+    "plan_fill",
+    "plan_annotate",
+    "plan_show_values",
+    "plan_colorbar",
 ]
