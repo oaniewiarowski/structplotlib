@@ -17,8 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional "Show Values" labels at controlling stations
 - Optional context geometry (thin lines for filtered-out members)
 - Per-story plotting with automatic figure generation
-- Convenience wrapper `plot_fill_plan` for pipeline-friendly usage
-- Core API functions: `normalize_df`, `filter_cases`, `envelope_by_member`, `reduce_plan`, `plot_plan`, `plot_plan_by_story`
+- Pipeline-friendly wrapper `planplot`
+- Core API functions: `normalize_df`, `filter_cases`, `envelope_by_member`, `reduce_plan`
 
 ### Documentation
 - README with quickstart examples

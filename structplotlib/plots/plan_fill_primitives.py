@@ -3,8 +3,6 @@ structplotlib.plots.plan_fill_primitives
 ========================================
 
 Composable Matplotlib-ish primitives for plan-view frame plots.
-
-This module is the refactoring target for the legacy `structplotlib.plots.plan_fill` logic.
 It exposes small render/annotation primitives and a few data-prep helpers so users can
 compose the exact same plots without a monolithic wrapper.
 
@@ -263,7 +261,8 @@ def frames_station_xy(
 ) -> pd.DataFrame:
     """Compute (x,y) along each member at the provided station values.
 
-    This matches the legacy mapping used by `plot_plan` for "Show Values" controlling stations.
+    This matches the legacy mapping used by the previous reduced-data plan plotter for
+    "Show Values" controlling stations.
     """
     require_columns(data, [station, x_i, y_i, x_j, y_j], where="frames_station_xy")
     df = data.copy()
@@ -481,7 +480,7 @@ def prepare_plan_dataframe(
 ) -> PreparedPlan:
     """Prepare a canonical, reduced dataframe suitable for plotting.
 
-    This is the non-plotting refactor of the legacy `plot_fill_plan` pipeline:
+    This is the non-plotting refactor of the legacy pipeline wrapper:
     - optional normalization to canonical schema
     - optional case filtering
     - optional member-level envelope across cases

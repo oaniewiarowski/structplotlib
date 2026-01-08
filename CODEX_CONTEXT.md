@@ -39,7 +39,7 @@ structplotlib/
 
   plots/
     __init__.py
-    plan_fill.py     # ETABS-style plan "fill diagram" with square markers + labels
+    plan_axes.py     # Axes-level helpers for ETABS-style plan "fill diagram" (fill/lines/labels)
 
   styles/
     __init__.py
@@ -67,9 +67,13 @@ Exported from `structplotlib/__init__.py`:
 - `Agg`, `Mode`
 
 ### Plotting
-- `plot_plan(df_reduced, ...) -> (fig, ax)`  *(reduced-only; no hidden filtering)*
-- `plot_plan_by_story(df_reduced, ...) -> {story: (fig, ax)}`
-- `plot_fill_plan(df_raw_or_canonical, ...) -> figs_dict or (figs_dict, dfs_dict)`
+- `planplot(data, ...) -> (fig, ax) | {story: (fig, ax)}`  *(pipeline-friendly wrapper)*
+- Axes-level helpers (matplotlib-composable):
+  - `plan_lines(data, ...) -> list[Line2D]`
+  - `plan_fill(data, ...) -> PathCollection`
+  - `plan_show_values(data, ...) -> list[Text]`
+  - `plan_annotate(data, ...) -> list[Text]`
+  - `plan_colorbar(mappable, ...) -> Colorbar`
 
 ---
 
@@ -181,24 +185,8 @@ Produces plot-ready data with:
 
 ## Plotting semantics (plan fill diagram)
 
-### plot_plan(df_reduced, ...)
-- Accepts **already-reduced** data only.
-- Draws each member line and places **square markers** along the member.
-- `k_per_segment` means **number of squares per interval between consecutive stations**.
-- `show_values=True` labels the controlling station value per member.
-- `value_fmt` can be `"{v:.2f}"` or a callable `(v)->str`.
-
-#### Selection vs context lines
-`plot_plan` supports `selected_col`:
-- members/rows with `selected_col==True` are plotted as colored squares
-- members with `selected_col==False` are drawn as **thin black context lines**
-- `selected_col` must be constant within each member_id (or error)
-
-### plot_plan_by_story(df_reduced, ...)
-- Plots one figure per story present in `df_reduced`.
-
-### plot_fill_plan(df, ...)
-This is the pipeline-friendly wrapper that may be used in notebooks/pipelines.
+### planplot(data, ...)
+This is the pipeline-friendly wrapper used in notebooks/pipelines.
 
 Key behavior:
 - `normalize=True` by default:
@@ -216,8 +204,8 @@ Key behavior:
   - False → thin black context line
   - must be constant within each `(story, member_id)` or error
 - Returns:
-  - `figs_dict = {story: (fig, ax)}`
-  - if `return_df=True`: `(figs_dict, dfs_dict)` where `dfs_dict` are the reduced dfs used for plotting
+  - if `story` is provided: `(fig, ax)`
+  - if `story is None`: `{story: (fig, ax)}`
 
 ---
 
@@ -294,7 +282,7 @@ A single governing case triple is chosen per member; stations are not allowed to
 1) Decide the **canonical reduced dataframe contract** for the plot
 2) Add reducer(s) in `reduce/` (pure pandas)
 3) Add plotter(s) in `plots/` (matplotlib only)
-4) Add a pipeline wrapper if needed (similar to `plot_fill_plan`)
+4) Add a pipeline wrapper if needed (similar to `planplot`)
 5) Add tests + minimal fixtures
 
 ### Add another vendor schema
@@ -324,15 +312,15 @@ Add constants to `styles/defaults.py` and use them in plotters (with kwargs to o
 > Define exact scoring rule; update type hints; add tests for tie-breaking and deterministic behavior; keep strict error behavior.
 
 ### Template D — Add station unit validation
-> Add `station_units="length"|"normalized"` support to `plot_fill_plan` and/or `normalize_df`.  
+> Add `station_units="length"|"normalized"` support to `prepare_plan_dataframe` and/or `normalize_df`.  
 > Default "length". Fail loudly if values look normalized but units="length" and vice versa. Add tests that cover both.
 
 ---
 
 ## “Do not break” list (hard constraints)
 
-- Do not move filtering/enveloping logic into `plot_plan` / reduced-only plotters.
+- Do not move filtering/enveloping logic into axes-level plotters.
 - Do not hard-code any CSI value column names (DCR/ratio columns must pass through).
-- Keep `plot_fill_plan` returning `{story: (fig, ax)}` and optionally `(figs_dict, dfs_dict)` when `return_df=True`.
+- Keep `planplot` returning `{story: (fig, ax)}` when `story is None`.
 - Keep strict + loud validation on schema and reduction assumptions.
 - Keep tests fast, deterministic, and fixture-based.

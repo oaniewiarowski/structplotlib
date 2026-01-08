@@ -9,10 +9,12 @@ from structplotlib import (
     SchemaError,
     envelope_by_member,
     load_df,
-    plot_fill_plan,
-    plot_plan,
+    plan_fill,
+    plan_show_values,
+    planplot,
     reduce_plan,
 )
+from structplotlib.plots.plan_fill_primitives import prepare_plan_dataframe
 
 
 def test_schema_normalize_etabs_required_canonical_columns_exist():
@@ -176,16 +178,11 @@ def test_reduce_plan_preserves_duplicate_stations_across_elements_and_plot_handl
     assert set(s5["element"].tolist()) == {"A1-1", "A1-2"}
 
     # Plot should not crash even with duplicate stations (treated as a discontinuity).
-    fig, ax = plot_plan(
-        red,
-        story="L1",
-        value_col="value",
-        show_colorbar=False,
-        show_values=False,
-    )
-    assert len(ax.collections) == 1  # scatter exists
-
     import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    _ = plan_fill(red[red["story"] == "L1"].copy(), ax=ax, value="value", k_per_segment=5)
+    assert len(ax.collections) == 1  # scatter exists
 
     plt.close(fig)
 
@@ -195,13 +192,19 @@ def test_plot_smoke_and_annotation_matches_value():
     env = envelope_by_member(df, value_col="DCR_MAX", mode="max")
     red = reduce_plan(env, value_col="DCR_MAX", station_agg="max")
 
-    fig, ax = plot_plan(
-        red,
-        story=str(red["story"].iloc[0]),
-        show_values=True,
+    import matplotlib.pyplot as plt
+
+    story = str(red["story"].iloc[0])
+    df_story = red[red["story"] == story].copy()
+    fig, ax = plt.subplots()
+    _ = plan_fill(df_story, ax=ax, value="value", k_per_segment=5)
+    _ = plan_show_values(
+        df_story,
+        ax=ax,
+        value="value",
         value_fmt="{v:.2f}",
-        value_col="value",
-        show_colorbar=False,
+        threshold=None,
+        color="black",
     )
     texts = [t.get_text() for t in ax.texts]
 
@@ -214,8 +217,6 @@ def test_plot_smoke_and_annotation_matches_value():
     )
     expected_labels = {f"{float(v):.2f}" for v in ctrl["value"].to_list()}
     assert expected_labels.issubset(set(texts))
-
-    import matplotlib.pyplot as plt
 
     plt.close(fig)
 
@@ -236,24 +237,25 @@ def test_plot_annotation_alt_color_above_threshold():
     assert len(abs_vals) >= 2
     thresh = 0.5 * (abs_vals[0] + abs_vals[-1])
 
-    fig, ax = plot_plan(
-        red,
-        story=str(red["story"].iloc[0]),
-        show_values=True,
+    import matplotlib.pyplot as plt
+
+    story = str(red["story"].iloc[0])
+    df_story = red[red["story"] == story].copy()
+    fig, ax = plt.subplots()
+    _ = plan_fill(df_story, ax=ax, value="value", k_per_segment=5)
+    _ = plan_show_values(
+        df_story,
+        ax=ax,
+        value="value",
         value_fmt="{v:.2f}",
-        value_col="value",
-        show_colorbar=False,
-        annotate_threshold=float(thresh),
-        value_text_color="black",
-        value_text_color_above_threshold="red",
+        threshold=float(thresh),
+        color="red",
     )
 
     # Only the maximum controlling member should remain.
     expected_txt = f"{abs_vals[-1]:.2f}"
     assert [t.get_text() for t in ax.texts] == [expected_txt]
     assert ax.texts[0].get_color() == "red"
-
-    import matplotlib.pyplot as plt
 
     plt.close(fig)
 
@@ -270,15 +272,15 @@ def test_plot_fill_plan_normalize_accepts_alias_headers_and_raw_value_column():
         }
     )
 
-    figs = plot_fill_plan(
+    figs = planplot(
         raw,
         source="etabs",
         normalize=True,
-        value_col="DCR_MAX",  # value column is not part of schema; should pass through
+        value="DCR_MAX",  # value column is not part of schema; should pass through
         cases=["CASE_A", "CASE_B"],
         envelope=True,
         reduction_mode="max",
-        show_colorbar=False,
+        colorbar=False,
         show_values=False,
         width_in=6.0,
     )
@@ -294,9 +296,9 @@ def test_plot_fill_plan_normalize_accepts_alias_headers_and_raw_value_column():
         plt.close(fig)
 
 
-def test_plot_fill_plan_return_df_includes_output_case_for_debugging():
+def test_prepare_plan_dataframe_includes_output_case_for_debugging():
     raw = pd.read_csv("tests/data/etabs_min.csv")
-    figs, dfs = plot_fill_plan(
+    prep = prepare_plan_dataframe(
         raw,
         source="etabs",
         normalize=True,
@@ -304,15 +306,9 @@ def test_plot_fill_plan_return_df_includes_output_case_for_debugging():
         cases=["CASE_A", "CASE_B"],
         envelope=True,
         reduction_mode="max",
-        show_colorbar=False,
-        show_values=False,
-        width_in=6.0,
-        return_df=True,
     )
 
-    story = list(figs.keys())[0]
-    assert story in dfs
-    df_used = dfs[story]
+    df_used = prep.df
     assert "output_case" in df_used.columns
 
     # Validate that the output_case present in the returned df is consistent with a manual envelope.
@@ -338,13 +334,6 @@ def test_plot_fill_plan_return_df_includes_output_case_for_debugging():
     )
     assert got == expected
 
-    # Clean up created figures
-    for fig, _ax in figs.values():
-        fig.clf()
-        import matplotlib.pyplot as plt
-
-        plt.close(fig)
-
 
 def test_plot_fill_plan_allows_categorical_value_col_without_step_type_selection():
     # Regression: categorical value columns (e.g. member_id / Unique Name) should not require
@@ -366,11 +355,11 @@ def test_plot_fill_plan_allows_categorical_value_col_without_step_type_selection
         }
     )
 
-    figs = plot_fill_plan(
+    figs = planplot(
         df,
         normalize=False,
-        value_col="member_id",
-        show_colorbar=False,
+        value="member_id",
+        colorbar=False,
         width_in=6.0,
     )
     fig, ax = figs["L1"]

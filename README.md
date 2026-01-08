@@ -41,20 +41,21 @@ pip install -e ".[dev]"
 
 ## Quickstart (pipeline-friendly)
 
-`plot_fill_plan` is the main entry point for notebooks/pipelines. It can accept a **raw ETABS/SAP export** (optionally normalizing)
-or an already-canonical dataframe.
+`planplot` is the main entry point for notebooks/pipelines. It can accept a **raw ETABS/SAP export** (optionally normalizing)
+or an already-canonical dataframe, and will produce **one figure per story**.
 
 ```python
 import pandas as pd
-from structplotlib import plot_fill_plan
+from structplotlib import planplot
+from structplotlib.plots.plan_fill_primitives import prepare_plan_dataframe
 
 raw = pd.read_excel("my_etabs_export.xlsx")
 
-figs, dfs = plot_fill_plan(
+figs = planplot(
     raw,
     source="etabs",                 # required if raw/non-canonical
     normalize=True,                 # default True
-    value_col="DCR_M3",          # any numeric column you want to plot
+    value="DCR_M3",                # any numeric column you want to plot
     cases=["1.2D+1.6L", "1.2D+1.0Wx+1.0L"],
     envelope=True,                  # member-level governing triple
     reduction_mode="absmax",        # default absmax
@@ -62,11 +63,20 @@ figs, dfs = plot_fill_plan(
     show_values=True,
     value_fmt="{v:.2f}",
     frame_filter=None,              # optional boolean mask aligned to raw df rows
-    return_df=True,                 # returns (figs_dict, dfs_dict)
 )
 
-# Example: get the reduced df for story "L3"
-df_L3 = dfs["L3"]
+# Optional: get the exact reduced dataframe used for plotting (for debugging / verification)
+prep = prepare_plan_dataframe(
+    raw,
+    source="etabs",
+    normalize=True,
+    value_col="DCR_M3",
+    cases=["1.2D+1.6L", "1.2D+1.0Wx+1.0L"],
+    envelope=True,
+    reduction_mode="absmax",
+    station_agg="max",
+)
+df_red = prep.df
 ```
 
 `figs` is a dict keyed by story name: `{story: (fig, ax)}`.
@@ -112,8 +122,17 @@ Internally, structplotlib uses canonical snake_case column names. The minimum se
 If you want to build a custom pipeline (e.g., normalize once, reduce many times):
 
 ```python
-from structplotlib import normalize_df, filter_cases, envelope_by_member, reduce_plan
-from structplotlib.plots.plan_fill import plot_plan_by_story
+import matplotlib.pyplot as plt
+
+from structplotlib import (
+    envelope_by_member,
+    filter_cases,
+    normalize_df,
+    plan_colorbar,
+    plan_fill,
+    plan_show_values,
+    reduce_plan,
+ )
 
 df = normalize_df(raw, source="etabs", table="frame_dcr", strict=True)
 
@@ -121,7 +140,17 @@ df = filter_cases(df, cases=["CASE_A", "CASE_B"])
 df_env = envelope_by_member(df, value_col="PMM Ratio", mode="absmax", station_agg="max")
 df_red = reduce_plan(df_env, value_col="PMM Ratio", station_agg="max")
 
-figs = plot_plan_by_story(df_red, show_values=True, value_fmt="{v:.2f}")
+figs = {}
+for story in df_red["story"].unique():
+    df_story = df_red[df_red["story"] == story].copy()
+    fig, ax = plt.subplots()
+    markers = plan_fill(df_story, ax=ax, value="value", k_per_segment=5)
+    _ = plan_colorbar(markers, ax=ax, label="PMM Ratio", location="bottom", fraction=0.05, pad=0.0, aspect=10)
+    _ = plan_show_values(df_story, ax=ax, value="value", value_fmt="{v:.2f}")
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.axis("off")
+    ax.set_title(f"{story} — PMM Ratio")
+    figs[str(story)] = (fig, ax)
 ```
 
 ---
