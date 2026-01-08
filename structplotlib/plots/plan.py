@@ -287,8 +287,10 @@ def planplot(
 
             # Labels: default to plotted value; override via `label=...`
             if label_fn is None:
+
                 def label_fn_eff(r):
                     return str(r["value"])
+
             else:
                 label_fn_eff = label_fn
 
