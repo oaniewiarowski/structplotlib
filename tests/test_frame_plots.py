@@ -370,3 +370,46 @@ def test_plot_fill_plan_allows_categorical_value_col_without_step_type_selection
     import matplotlib.pyplot as plt
 
     plt.close(fig)
+
+
+def test_planplot_frame_filter_works_without_story_column_in_input():
+    # Regression: planplot(frame_filter=...) previously assumed the *input* dataframe had "story",
+    # but prepare_plan_dataframe defaults story="ALL" even when the input is story-less.
+    df = pd.DataFrame(
+        {
+            # Intentionally omit "story"
+            "member_id": ["A1", "A1", "B1", "B1"],
+            "station": [0.0, 10.0, 0.0, 10.0],
+            "output_case": ["CASE_A", "CASE_A", "CASE_A", "CASE_A"],
+            "case_type": ["Combination", "Combination", "Combination", "Combination"],
+            "step_type": ["", "", "", ""],
+            "x_i": [0.0, 0.0, 0.0, 0.0],
+            "y_i": [0.0, 0.0, 5.0, 5.0],
+            "x_j": [10.0, 10.0, 10.0, 10.0],
+            "y_j": [0.0, 0.0, 5.0, 5.0],
+            "DCR": [0.1, 0.2, 0.9, 1.0],
+        }
+    )
+    # Select only member A1 (constant within member)
+    frame_filter = df["member_id"].eq("A1")
+
+    figs = planplot(
+        df,
+        normalize=False,
+        value="DCR",
+        colorbar=False,
+        show_values=False,
+        frame_filter=frame_filter,
+        return_artists=True,
+        width_in=6.0,
+    )
+    fig, ax, artists = figs["ALL"]
+
+    # In numeric fill mode, unselected members are drawn as thin context lines.
+    assert artists.context_lines is not None
+    assert len(artists.context_lines) == 1
+    assert len(ax.lines) == 1
+
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)

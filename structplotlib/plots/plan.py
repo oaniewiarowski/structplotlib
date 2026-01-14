@@ -90,20 +90,29 @@ def _attach_member_selection_from_frame_filter(
     ff = np.asarray(list(frame_filter), dtype=bool)
     df0 = df_input.copy()
     df0["_selected_row"] = ff
-    g = df0.groupby(["story", "member_id"], sort=False)["_selected_row"].nunique(dropna=False)
+    if "member_id" not in df0.columns:
+        raise ValueError("[planplot] frame_filter requires 'member_id' in the input dataframe")
+
+    # Prefer story-aware selection when available; otherwise select per-member across all stories.
+    keys: list[str] = []
+    if "story" in df0.columns and "story" in df_reduced.columns:
+        keys.append("story")
+    keys.append("member_id")
+
+    g = df0.groupby(keys, sort=False)["_selected_row"].nunique(dropna=False)
     bad = g[g > 1]
     if not bad.empty:
         offenders = list(bad.index[:8])
         raise ValueError(
-            "[planplot] frame_filter must be constant within each (story, member_id). "
+            f"[planplot] frame_filter must be constant within each {tuple(keys)!r}. "
             f"Examples with mixed True/False: {offenders}"
         )
     selected_map = (
-        df0.groupby(["story", "member_id"], sort=False, as_index=False)["_selected_row"]
+        df0.groupby(keys, sort=False, as_index=False)["_selected_row"]
         .first()
         .rename(columns={"_selected_row": "selected"})
     )
-    out = df_reduced.merge(selected_map, on=["story", "member_id"], how="left")
+    out = df_reduced.merge(selected_map, on=keys, how="left")
     out["selected"] = out["selected"].fillna(True).astype(bool)
     return out, "selected"
 
@@ -232,10 +241,18 @@ def planplot(
     # Selection/context derived from input (row-aligned) mask
     selected_col = None
     if frame_filter is not None:
+        df_input_for_selection = data
+        ff_for_selection = frame_filter
+        if story is not None and "story" in data.columns:
+            story_mask = data["story"] == story
+            df_input_for_selection = data.loc[story_mask].copy()
+            # If the provided mask is for the full dataframe, subset it to this story.
+            if len(frame_filter) == len(data):
+                ff_for_selection = np.asarray(list(frame_filter), dtype=bool)[story_mask.to_numpy()]
         df_red, selected_col = _attach_member_selection_from_frame_filter(
-            data if story is None else data[data.get("story", "ALL") == story],
+            df_input_for_selection,
             df_red,
-            frame_filter=frame_filter,
+            frame_filter=ff_for_selection,
         )
 
     # Determine mode for plotting
