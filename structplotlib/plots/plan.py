@@ -37,6 +37,18 @@ from .plan_fill_primitives import _infer_figsize_from_bbox, prepare_plan_datafra
 Kind = Literal["auto", "fill", "lines"]
 
 
+def _merge_kws(defaults: Mapping[str, Any], overrides: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Merge kwargs dicts so user overrides win without duplicate-key TypeErrors.
+
+    This is important when we want to provide sensible defaults while still allowing
+    callers to override *any* of them via the passthrough `*_kws` dictionaries.
+    """
+    merged = dict(defaults)
+    if overrides:
+        merged.update(overrides)
+    return merged
+
+
 @dataclass(frozen=True)
 class PlanArtists:
     """Lightweight collection of artists produced by `planplot`.
@@ -263,37 +275,54 @@ def planplot(
 
         # Context layer (thin black lines)
         if not df_ctx.empty:
+            ctx_kws = _merge_kws(
+                {
+                    "color": "black",
+                    "linewidth": 0.5,
+                    "zorder": 1,
+                },
+                context_line_kws,
+            )
             ctx_lines = plan_lines(
                 df_ctx,
                 ax=ax0,
                 member="member_id",
-                color="black",
-                linewidth=0.5,
-                zorder=1,
-                **dict(context_line_kws),
+                **ctx_kws,
             )
 
         if label_only:
             # Selected lines
+            sel_line_kws = _merge_kws(
+                {
+                    "color": "black",
+                    "linewidth": 1.2,
+                    "zorder": 2,
+                },
+                line_kws,
+            )
             lines = plan_lines(
                 df_sel,
                 ax=ax0,
                 member="member_id",
-                color="black",
-                linewidth=1.2,
-                zorder=2,
-                **dict(line_kws),
+                **sel_line_kws,
             )
 
             # Labels: default to plotted value; override via `label=...`
             if label_fn is None:
 
-                def label_fn_eff(r):
+                def label_fn_eff(r: pd.Series) -> str:
                     return str(r["value"])
 
             else:
                 label_fn_eff = label_fn
 
+            annotate_kws = _merge_kws(
+                {
+                    "fontsize": 10.0,
+                    "color": "black",
+                },
+                text_kws,
+            )
             texts.extend(
                 plan_annotate(
                     df_sel.groupby("member_id", sort=False, as_index=False).first(),
@@ -301,14 +330,22 @@ def planplot(
                     where="midpoint",
                     rotate_with_member=True,
                     text=label_fn_eff,
-                    fontsize=10.0,
-                    color="black",
-                    **dict(text_kws),
+                    **annotate_kws,
                 )
             )
         else:
             # Fill markers for selected members only (or all if none selected)
             df_fill = df_sel if not df_sel.empty else df_story
+            fill_kws_eff = _merge_kws(
+                {
+                    "marker": "s",
+                    "s": float(marker_size),
+                    "linewidths": 0.0,
+                    "alpha": 0.95,
+                    "zorder": 3.0,
+                },
+                fill_kws,
+            )
             markers = plan_fill(
                 df_fill,
                 ax=ax0,
@@ -320,23 +357,23 @@ def planplot(
                 cmap=str(cmap),
                 vmin=vmin,
                 vmax=vmax,
-                marker="s",
-                s=float(marker_size),
-                linewidths=0.0,
-                alpha=0.95,
-                zorder=3.0,
-                **dict(fill_kws),
+                **fill_kws_eff,
             )
             if colorbar:
+                colorbar_kws_eff = _merge_kws(
+                    {
+                        "label": str(value),
+                        "location": "bottom",
+                        "fraction": 0.05,
+                        "pad": 0.0,
+                        "aspect": 10,
+                    },
+                    colorbar_kws,
+                )
                 cb = plan_colorbar(
                     markers,
                     ax=ax0,
-                    label=str(value),
-                    location="bottom",
-                    fraction=0.05,
-                    pad=0.0,
-                    aspect=10,
-                    **dict(colorbar_kws),
+                    **colorbar_kws_eff,
                 )
 
             # Optional controlling-station labels (ETABS-like "Show Values")
@@ -349,6 +386,17 @@ def planplot(
                     )
                 else:
                     base_color = str(value_text_color)
+                show_value_kws = _merge_kws(
+                    {
+                        "mode": "absmax",
+                        "value_fmt": value_fmt,
+                        "threshold": annotate_threshold,
+                        "normal_offset": float(label_shift),
+                        "fontsize": 12.0,
+                        "color": base_color,
+                    },
+                    text_kws,
+                )
                 texts.extend(
                     plan_show_values(
                         df_fill,
@@ -356,13 +404,7 @@ def planplot(
                         value="value",
                         member="member_id",
                         station="station",
-                        mode="absmax",
-                        value_fmt=value_fmt,
-                        threshold=annotate_threshold,
-                        normal_offset=float(label_shift),
-                        fontsize=12.0,
-                        color=base_color,
-                        **dict(text_kws),
+                        **show_value_kws,
                     )
                 )
 
