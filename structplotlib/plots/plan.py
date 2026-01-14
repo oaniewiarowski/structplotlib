@@ -309,7 +309,10 @@ def planplot(
 
             # Labels: default to plotted value; override via `label=...`
             if label_fn is None:
-                label_fn_eff = lambda r: str(r["value"])
+
+                def label_fn_eff(r: pd.Series) -> str:
+                    return str(r["value"])
+
             else:
                 label_fn_eff = label_fn
 
