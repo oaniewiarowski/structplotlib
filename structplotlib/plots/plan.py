@@ -90,29 +90,20 @@ def _attach_member_selection_from_frame_filter(
     ff = np.asarray(list(frame_filter), dtype=bool)
     df0 = df_input.copy()
     df0["_selected_row"] = ff
-    if "member_id" not in df0.columns:
-        raise ValueError("[planplot] frame_filter requires 'member_id' in the input dataframe")
-
-    # Prefer story-aware selection when available; otherwise select per-member across all stories.
-    keys: list[str] = []
-    if "story" in df0.columns and "story" in df_reduced.columns:
-        keys.append("story")
-    keys.append("member_id")
-
-    g = df0.groupby(keys, sort=False)["_selected_row"].nunique(dropna=False)
+    g = df0.groupby(["story", "member_id"], sort=False)["_selected_row"].nunique(dropna=False)
     bad = g[g > 1]
     if not bad.empty:
         offenders = list(bad.index[:8])
         raise ValueError(
-            f"[planplot] frame_filter must be constant within each {tuple(keys)!r}. "
+            "[planplot] frame_filter must be constant within each (story, member_id). "
             f"Examples with mixed True/False: {offenders}"
         )
     selected_map = (
-        df0.groupby(keys, sort=False, as_index=False)["_selected_row"]
+        df0.groupby(["story", "member_id"], sort=False, as_index=False)["_selected_row"]
         .first()
         .rename(columns={"_selected_row": "selected"})
     )
-    out = df_reduced.merge(selected_map, on=keys, how="left")
+    out = df_reduced.merge(selected_map, on=["story", "member_id"], how="left")
     out["selected"] = out["selected"].fillna(True).astype(bool)
     return out, "selected"
 
@@ -241,18 +232,10 @@ def planplot(
     # Selection/context derived from input (row-aligned) mask
     selected_col = None
     if frame_filter is not None:
-        df_input_for_selection = data
-        ff_for_selection = frame_filter
-        if story is not None and "story" in data.columns:
-            story_mask = data["story"] == story
-            df_input_for_selection = data.loc[story_mask].copy()
-            # If the provided mask is for the full dataframe, subset it to this story.
-            if len(frame_filter) == len(data):
-                ff_for_selection = np.asarray(list(frame_filter), dtype=bool)[story_mask.to_numpy()]
         df_red, selected_col = _attach_member_selection_from_frame_filter(
-            df_input_for_selection,
+            data if story is None else data[data.get("story", "ALL") == story],
             df_red,
-            frame_filter=ff_for_selection,
+            frame_filter=frame_filter,
         )
 
     # Determine mode for plotting
@@ -308,48 +291,114 @@ def planplot(
             )
 
         if label_only:
-            # Selected lines
-            sel_line_kws = _merge_kws(
-                {
-                    "color": "black",
-                    "linewidth": 1.2,
-                    "zorder": 2,
-                },
-                line_kws,
-            )
-            lines = plan_lines(
-                df_sel,
-                ax=ax0,
-                member="member_id",
-                **sel_line_kws,
-            )
-
-            # Labels: default to plotted value; override via `label=...`
-            if label_fn is None:
-
-                def label_fn_eff(r: pd.Series) -> str:
-                    return str(r["value"])
-
-            else:
-                label_fn_eff = label_fn
-
-            annotate_kws = _merge_kws(
-                {
-                    "fontsize": 10.0,
-                    "color": "black",
-                },
-                text_kws,
-            )
-            texts.extend(
-                plan_annotate(
-                    df_sel.groupby("member_id", sort=False, as_index=False).first(),
-                    ax=ax0,
-                    where="midpoint",
-                    rotate_with_member=True,
-                    text=label_fn_eff,
-                    **annotate_kws,
+            # --- Lines -------------------------------------------------------
+            # When show_values + annotate_threshold: two-color line rendering
+            # (above-threshold in highlight color, below in base color).
+            if show_values and annotate_threshold is not None:
+                df_mem_val = (
+                    df_sel.groupby("member_id", sort=False, as_index=False)["value"]
+                    .first()
                 )
-            )
+                above_members = set(
+                    df_mem_val.loc[
+                        df_mem_val["value"].apply(lambda x: abs(float(x)))
+                        >= float(annotate_threshold),
+                        "member_id",
+                    ]
+                )
+                df_above = df_sel[df_sel["member_id"].isin(above_members)]
+                df_below = df_sel[~df_sel["member_id"].isin(above_members)]
+
+                above_color = (
+                    str(value_text_color_above_threshold)
+                    if value_text_color_above_threshold is not None
+                    else str(value_text_color)
+                )
+
+                if not df_below.empty:
+                    below_kws = _merge_kws(
+                        {"color": str(value_text_color), "linewidth": 1.2, "zorder": 2},
+                        line_kws,
+                    )
+                    lines = plan_lines(df_below, ax=ax0, member="member_id", **below_kws)
+
+                if not df_above.empty:
+                    above_kws = _merge_kws(
+                        {"color": above_color, "linewidth": 1.2, "zorder": 2},
+                        line_kws,
+                    )
+                    above_lines = plan_lines(
+                        df_above, ax=ax0, member="member_id", **above_kws
+                    )
+                    lines = (lines or []) + above_lines
+            else:
+                sel_line_kws = _merge_kws(
+                    {"color": "black", "linewidth": 1.2, "zorder": 2},
+                    line_kws,
+                )
+                lines = plan_lines(df_sel, ax=ax0, member="member_id", **sel_line_kws)
+
+            # --- Annotations -------------------------------------------------
+            if show_values:
+                def _label_only_fmt(r: pd.Series) -> str:
+                    v = float(r["value"])
+                    if callable(value_fmt):
+                        return str(value_fmt(v))
+                    return str(value_fmt.format(v=v))
+
+                df_annot = df_sel.groupby(
+                    "member_id", sort=False, as_index=False
+                ).first()
+
+                if annotate_threshold is not None:
+                    mask = (
+                        df_annot["value"].apply(lambda x: abs(float(x)))
+                        >= float(annotate_threshold)
+                    )
+                    df_annot = df_annot[mask].copy()
+
+                if not df_annot.empty:
+                    ann_color = (
+                        str(value_text_color_above_threshold)
+                        if annotate_threshold is not None
+                        and value_text_color_above_threshold is not None
+                        else str(value_text_color)
+                    )
+                    annotate_kws = _merge_kws(
+                        {"fontsize": 10.0, "color": ann_color},
+                        text_kws,
+                    )
+                    texts.extend(
+                        plan_annotate(
+                            df_annot,
+                            ax=ax0,
+                            where="midpoint",
+                            rotate_with_member=True,
+                            normal_offset=float(label_shift),
+                            text=_label_only_fmt,
+                            **annotate_kws,
+                        )
+                    )
+            else:
+                if label_fn is None:
+                    label_fn_eff = lambda r: str(r["value"])
+                else:
+                    label_fn_eff = label_fn
+
+                annotate_kws = _merge_kws(
+                    {"fontsize": 10.0, "color": "black"},
+                    text_kws,
+                )
+                texts.extend(
+                    plan_annotate(
+                        df_sel.groupby("member_id", sort=False, as_index=False).first(),
+                        ax=ax0,
+                        where="midpoint",
+                        rotate_with_member=True,
+                        text=label_fn_eff,
+                        **annotate_kws,
+                    )
+                )
         else:
             # Fill markers for selected members only (or all if none selected)
             df_fill = df_sel if not df_sel.empty else df_story

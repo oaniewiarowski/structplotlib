@@ -44,6 +44,7 @@ from .plan_fill_primitives import (
     plot_frames_lines,
     select_controlling_stations,
 )
+from ..schema.base import require_columns
 
 
 def plan_lines(
@@ -215,6 +216,89 @@ def plan_annotate(
         text_kws=dict(text_kws),
     )
     return out["texts"]
+
+
+def plan_points(
+    data: pd.DataFrame,
+    *,
+    ax=None,
+    x: str = "x",
+    y: str = "y",
+    **scatter_kws,
+):
+    """Scatter plan points at provided x/y columns (axes-level)."""
+    require_columns(data, [x, y], where="plan_points")
+    if ax is None:
+        ax = plt.gca()
+    df = data
+    if df.empty:
+        return ax.scatter([], [], **dict(scatter_kws))
+    xs = df[x].to_numpy(float)
+    ys = df[y].to_numpy(float)
+    return ax.scatter(xs, ys, **dict(scatter_kws))
+
+
+def plan_point_labels(
+    data: pd.DataFrame,
+    *,
+    ax=None,
+    x: str = "x",
+    y: str = "y",
+    text: str | Callable[[pd.Series], str] = "label",
+    xy_offset: tuple[float, float] = (0.0, 0.0),
+    offset_points: tuple[float, float] | None = (5.0, 5.0),
+    mask: Sequence[bool] | None = None,
+    **text_kws,
+):
+    """Annotate labels anchored at explicit x/y (axes-level).
+
+    Parameters
+    ----------
+    xy_offset:
+        Offset applied in data units before annotation (dx, dy).
+    offset_points:
+        If provided, apply an additional text offset in display points via ax.annotate.
+    """
+    require_columns(data, [x, y], where="plan_point_labels")
+    if ax is None:
+        ax = plt.gca()
+    df = data
+    if mask is not None:
+        mask_arr = np.asarray(list(mask), dtype=bool)
+        if mask_arr.size != len(df):
+            raise ValueError("[plan_point_labels] mask must be the same length as data")
+        df = df.loc[df.index[mask_arr]].copy()
+
+    xs = df[x].to_numpy(float) + float(xy_offset[0])
+    ys = df[y].to_numpy(float) + float(xy_offset[1])
+
+    def _get_text(row: pd.Series) -> str:
+        if callable(text):
+            return str(text(row))
+        if isinstance(text, str) and text in row.index:
+            return str(row[text])
+        return str(text)
+
+    artists = []
+    for i, (_idx, row) in enumerate(df.iterrows()):
+        kws = dict(
+            ha="left",
+            va="bottom",
+            zorder=5,
+        )
+        kws.update(text_kws)
+        if offset_points is None:
+            t = ax.text(float(xs[i]), float(ys[i]), _get_text(row), **kws)
+        else:
+            t = ax.annotate(
+                _get_text(row),
+                (float(xs[i]), float(ys[i])),
+                textcoords="offset points",
+                xytext=(float(offset_points[0]), float(offset_points[1])),
+                **kws,
+            )
+        artists.append(t)
+    return artists
 
 
 def plan_show_values(

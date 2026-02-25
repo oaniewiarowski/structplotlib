@@ -9,13 +9,23 @@ Matplotlib plotting utilities.
 """
 
 from .plan import planplot
-from .plan_axes import plan_annotate, plan_colorbar, plan_fill, plan_lines, plan_show_values
+from .plan_axes import (
+    plan_annotate,
+    plan_colorbar,
+    plan_fill,
+    plan_lines,
+    plan_point_labels,
+    plan_points,
+    plan_show_values,
+)
 
 __all__ = [
     "planplot",
     "plan_lines",
     "plan_fill",
     "plan_annotate",
+    "plan_points",
+    "plan_point_labels",
     "plan_show_values",
     "plan_colorbar",
 ]
